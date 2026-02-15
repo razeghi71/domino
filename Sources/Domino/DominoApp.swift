@@ -10,6 +10,12 @@ struct DominoApp: App {
     var body: some Scene {
         Window("Domino", id: "main") {
             ContentView(viewModel: viewModel)
+                .onAppear {
+                    appDelegate.viewModel = viewModel
+                    if let window = NSApplication.shared.windows.first {
+                        window.delegate = appDelegate
+                    }
+                }
         }
         .defaultSize(width: 1200, height: 800)
         .commands {
@@ -27,13 +33,17 @@ struct DominoApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New") {
                     ensureWindowOpen()
-                    viewModel.newBoard()
+                    viewModel.confirmDiscardIfNeeded {
+                        viewModel.newBoard()
+                    }
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
                 Button("Open...") {
                     ensureWindowOpen()
-                    viewModel.open()
+                    viewModel.confirmDiscardIfNeeded {
+                        viewModel.open()
+                    }
                 }
                 .keyboardShortcut("o", modifiers: .command)
             }
@@ -71,7 +81,14 @@ struct DominoApp: App {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unchecked Sendable {
+    var viewModel: DominoViewModel?
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard let viewModel, viewModel.isDirty else { return true }
+        return DominoViewModel.showDiscardAlert()
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
     }

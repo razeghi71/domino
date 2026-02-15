@@ -27,6 +27,7 @@ final class DominoViewModel: ObservableObject {
     private var undoStack: [[UUID: DominoNode]] = []
     private var redoStack: [[UUID: DominoNode]] = []
     private let maxUndoLevels = 50
+    private(set) var isDirty = false
 
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
@@ -37,6 +38,7 @@ final class DominoViewModel: ObservableObject {
             undoStack.removeFirst()
         }
         redoStack.removeAll()
+        isDirty = true
     }
 
     func undo() {
@@ -221,6 +223,28 @@ final class DominoViewModel: ObservableObject {
         selectedEdgeID = nil
     }
 
+    // MARK: - Unsaved changes guard
+
+    func confirmDiscardIfNeeded(then action: @escaping () -> Void) {
+        guard isDirty else {
+            action()
+            return
+        }
+        if Self.showDiscardAlert() {
+            action()
+        }
+    }
+
+    static func showDiscardAlert() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "You have unsaved changes"
+        alert.informativeText = "Do you want to discard your current board?"
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     // MARK: - New / Save / Open
 
     func newBoard() {
@@ -231,6 +255,7 @@ final class DominoViewModel: ObservableObject {
         currentFileURL = nil
         undoStack.removeAll()
         redoStack.removeAll()
+        isDirty = false
         fileLoadID = UUID()
     }
 
@@ -264,6 +289,7 @@ final class DominoViewModel: ObservableObject {
         encoder.outputFormatting = .prettyPrinted
         guard let data = try? encoder.encode(Array(nodes.values)) else { return }
         try? data.write(to: url)
+        isDirty = false
     }
 
     private func readFromFile(_ url: URL) {
@@ -272,6 +298,7 @@ final class DominoViewModel: ObservableObject {
         nodes = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
         editingNodeID = nil
         currentFileURL = url
+        isDirty = false
         fileLoadID = UUID()
     }
 }
