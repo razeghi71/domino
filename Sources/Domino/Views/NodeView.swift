@@ -102,9 +102,9 @@ struct NodeView: View {
                             let nodeID = node.id
                             let vm = viewModel
                             let panel = NSColorPanel.shared
-                            panel.color = NSColor(nodeColor ?? .white)
                             panel.setTarget(nil)
                             panel.setAction(nil)
+                            panel.color = NSColor(nodeColor ?? .white)
                             panel.orderFront(nil)
                             ColorPanelObserver.shared.observe(panel: panel) { nsColor in
                                 guard let srgb = nsColor.usingColorSpace(.sRGB) else { return }
