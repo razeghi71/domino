@@ -221,7 +221,18 @@ final class DominoViewModel: ObservableObject {
         selectedEdgeID = nil
     }
 
-    // MARK: - Save / Open
+    // MARK: - New / Save / Open
+
+    func newBoard() {
+        nodes.removeAll()
+        editingNodeID = nil
+        selectedNodeID = nil
+        selectedEdgeID = nil
+        currentFileURL = nil
+        undoStack.removeAll()
+        redoStack.removeAll()
+        fileLoadID = UUID()
+    }
 
     func save() {
         if let url = currentFileURL {

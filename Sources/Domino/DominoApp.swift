@@ -25,6 +25,12 @@ struct DominoApp: App {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .newItem) {
+                Button("New") {
+                    ensureWindowOpen()
+                    viewModel.newBoard()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
                 Button("Open...") {
                     ensureWindowOpen()
                     viewModel.open()
