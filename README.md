@@ -24,6 +24,24 @@ A lightweight mind map app for macOS, built with SwiftUI and Swift Package Manag
 
 ## Build & Run
 
+Run directly from source:
+
 ```
 swift run Domino
 ```
+
+## Install as macOS App
+
+Bundle it into a proper `.app`:
+
+```
+./scripts/bundle.sh
+```
+
+This builds a release binary and creates `build/Domino.app`. To install:
+
+```
+cp -R build/Domino.app /Applications/
+```
+
+The app is unsigned, so on first launch you may need to right-click > Open (or allow it in System Settings > Privacy & Security).
