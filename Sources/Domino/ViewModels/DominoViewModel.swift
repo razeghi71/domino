@@ -12,8 +12,8 @@ struct EdgeDragState: Equatable {
 }
 
 @MainActor
-final class MindMapViewModel: ObservableObject {
-    @Published var nodes: [UUID: MindMapNode] = [:]
+final class DominoViewModel: ObservableObject {
+    @Published var nodes: [UUID: DominoNode] = [:]
     @Published var editingNodeID: UUID?
     @Published var selectedNodeID: UUID?
     @Published var edgeDrag: EdgeDragState?
@@ -24,8 +24,8 @@ final class MindMapViewModel: ObservableObject {
     @Published var currentFileURL: URL?
     @Published var fileLoadID: UUID = UUID()
 
-    private var undoStack: [[UUID: MindMapNode]] = []
-    private var redoStack: [[UUID: MindMapNode]] = []
+    private var undoStack: [[UUID: DominoNode]] = []
+    private var redoStack: [[UUID: DominoNode]] = []
     private let maxUndoLevels = 50
 
     var canUndo: Bool { !undoStack.isEmpty }
@@ -55,7 +55,7 @@ final class MindMapViewModel: ObservableObject {
         selectedNodeID = nil
     }
 
-    var sortedNodes: [MindMapNode] {
+    var sortedNodes: [DominoNode] {
         Array(nodes.values).sorted { $0.id.uuidString < $1.id.uuidString }
     }
 
@@ -91,8 +91,8 @@ final class MindMapViewModel: ObservableObject {
 
     struct Edge: Identifiable {
         let id: String
-        let parent: MindMapNode
-        let child: MindMapNode
+        let parent: DominoNode
+        let child: DominoNode
     }
 
     var edges: [Edge] {
@@ -106,7 +106,7 @@ final class MindMapViewModel: ObservableObject {
 
     func addNode(at position: CGPoint) {
         saveSnapshot()
-        let node = MindMapNode(position: position)
+        let node = DominoNode(position: position)
         nodes[node.id] = node
         editingNodeID = node.id
     }
@@ -128,7 +128,7 @@ final class MindMapViewModel: ObservableObject {
             }
         }
 
-        let child = MindMapNode(position: position, parentIDs: [parentID])
+        let child = DominoNode(position: position, parentIDs: [parentID])
         nodes[child.id] = child
         editingNodeID = child.id
     }
@@ -234,7 +234,7 @@ final class MindMapViewModel: ObservableObject {
     func saveAs() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "MindMap.json"
+        panel.nameFieldStringValue = "Domino.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         currentFileURL = url
         writeToFile(url)
@@ -257,7 +257,7 @@ final class MindMapViewModel: ObservableObject {
 
     private func readFromFile(_ url: URL) {
         guard let data = try? Data(contentsOf: url),
-              let loaded = try? JSONDecoder().decode([MindMapNode].self, from: data) else { return }
+              let loaded = try? JSONDecoder().decode([DominoNode].self, from: data) else { return }
         nodes = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
         editingNodeID = nil
         currentFileURL = url

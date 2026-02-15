@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @ObservedObject var viewModel: MindMapViewModel
+    @ObservedObject var viewModel: DominoViewModel
 
     var body: some View {
         CanvasView(viewModel: viewModel)

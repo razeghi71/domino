@@ -3,12 +3,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "MindMap",
+    name: "Domino",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "MindMap",
-            path: "Sources/MindMap"
+            name: "Domino",
+            path: "Sources/Domino",
+            resources: [.process("Resources")]
         ),
     ]
 )

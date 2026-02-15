@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CanvasView: View {
-    @ObservedObject var viewModel: MindMapViewModel
+    @ObservedObject var viewModel: DominoViewModel
 
     @State private var panOffset: CGSize = .zero
     @State private var dragStart: CGSize = .zero

@@ -1,6 +1,6 @@
 import Foundation
 
-struct MindMapNode: Identifiable, Equatable, Codable {
+struct DominoNode: Identifiable, Equatable, Codable {
     let id: UUID
     var text: String
     var position: CGPoint

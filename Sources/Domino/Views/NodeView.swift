@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct NodeView: View {
-    let node: MindMapNode
-    @ObservedObject var viewModel: MindMapViewModel
+    let node: DominoNode
+    @ObservedObject var viewModel: DominoViewModel
     @State private var isHovering = false
     @State private var editText: String = ""
     @State private var dragOffset: CGSize = .zero

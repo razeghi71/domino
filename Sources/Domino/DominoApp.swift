@@ -2,13 +2,13 @@ import SwiftUI
 import AppKit
 
 @main
-struct MindMapApp: App {
+struct DominoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var viewModel = MindMapViewModel()
+    @StateObject private var viewModel = DominoViewModel()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        Window("MindMap", id: "main") {
+        Window("Domino", id: "main") {
             ContentView(viewModel: viewModel)
         }
         .defaultSize(width: 1200, height: 800)
@@ -71,6 +71,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApplication.shared.applicationIconImage = icon
+        } else if let icon = NSImage(named: "AppIcon") {
+            NSApplication.shared.applicationIconImage = icon
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NSApplication.shared.activate(ignoringOtherApps: true)
             NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
