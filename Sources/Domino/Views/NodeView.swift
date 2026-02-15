@@ -33,7 +33,7 @@ struct NodeView: View {
     private let cornerRadius: CGFloat = 8
 
     private var nodeSize: CGSize {
-        viewModel.nodeSizes[node.id] ?? CGSize(width: 132, height: 44)
+        viewModel.nodeSizes[node.id] ?? NodeDefaults.size
     }
 
     private static let presetColors: [(name: String, hex: String)] = [
@@ -107,12 +107,7 @@ struct NodeView: View {
                             panel.color = NSColor(nodeColor ?? .white)
                             panel.orderFront(nil)
                             ColorPanelObserver.shared.observe(panel: panel) { nsColor in
-                                guard let srgb = nsColor.usingColorSpace(.sRGB) else { return }
-                                let hex = String(format: "%02X%02X%02X",
-                                    Int(srgb.redComponent * 255),
-                                    Int(srgb.greenComponent * 255),
-                                    Int(srgb.blueComponent * 255))
-                                vm.setNodeColor(nodeID, hex: hex)
+                                vm.setNodeColor(nodeID, hex: Color(nsColor: nsColor).toHex())
                             }
                         }
                         if node.colorHex != nil {

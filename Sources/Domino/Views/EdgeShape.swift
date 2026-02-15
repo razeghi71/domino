@@ -7,8 +7,8 @@ enum BorderSide {
 struct EdgeShape: View {
     var from: CGPoint
     var to: CGPoint
-    var fromSize: CGSize = CGSize(width: 132, height: 44)
-    var toSize: CGSize = CGSize(width: 132, height: 44)
+    var fromSize: CGSize = NodeDefaults.size
+    var toSize: CGSize = NodeDefaults.size
     var color: Color = .secondary
     var dash: [CGFloat]? = nil
     var isSelected: Bool = false
@@ -23,6 +23,25 @@ struct EdgeShape: View {
         Self.computeCurve(from: from, to: to, fromSize: fromSize, toSize: toSize, cpDistance: cpDistance, arrowLength: arrowLength)
     }
 
+    private func arrowWingPoints(tip: CGPoint, dir: CGFloat) -> (left: CGPoint, right: CGPoint) {
+        let left = CGPoint(
+            x: tip.x - arrowLength * cos(dir - arrowAngle),
+            y: tip.y - arrowLength * sin(dir - arrowAngle)
+        )
+        let right = CGPoint(
+            x: tip.x - arrowLength * cos(dir + arrowAngle),
+            y: tip.y - arrowLength * sin(dir + arrowAngle)
+        )
+        return (left, right)
+    }
+
+    private static func curvePath(from source: CGPoint, to target: CGPoint, cp1: CGPoint, cp2: CGPoint) -> Path {
+        Path { path in
+            path.move(to: source)
+            path.addCurve(to: target, control1: cp1, control2: cp2)
+        }
+    }
+
     var body: some View {
         if let pts = curvePoints {
             let bounds = computeBounds(pts)
@@ -35,32 +54,21 @@ struct EdgeShape: View {
             let localCp1 = CGPoint(x: pts.cp1.x + ox, y: pts.cp1.y + oy)
             let localCp2 = CGPoint(x: pts.cp2.x + ox, y: pts.cp2.y + oy)
 
+            let curve = Self.curvePath(from: localSourceExit, to: localArrowBase, cp1: localCp1, cp2: localCp2)
+
             ZStack {
                 Canvas { context, size in
                     let drawColor = isSelected ? Color.accentColor : color
-
-                    var curve = Path()
-                    curve.move(to: localSourceExit)
-                    curve.addCurve(to: localArrowBase, control1: localCp1, control2: localCp2)
 
                     var strokeStyle = StrokeStyle(lineWidth: isSelected ? 2.5 : 2, lineCap: .round)
                     if let dash { strokeStyle.dash = dash }
                     context.stroke(curve, with: .color(drawColor), style: strokeStyle)
 
-                    // Arrowhead
-                    let left = CGPoint(
-                        x: localTip.x - arrowLength * cos(pts.arrowDir - arrowAngle),
-                        y: localTip.y - arrowLength * sin(pts.arrowDir - arrowAngle)
-                    )
-                    let right = CGPoint(
-                        x: localTip.x - arrowLength * cos(pts.arrowDir + arrowAngle),
-                        y: localTip.y - arrowLength * sin(pts.arrowDir + arrowAngle)
-                    )
-
+                    let wings = arrowWingPoints(tip: localTip, dir: pts.arrowDir)
                     var arrow = Path()
                     arrow.move(to: localTip)
-                    arrow.addLine(to: left)
-                    arrow.addLine(to: right)
+                    arrow.addLine(to: wings.left)
+                    arrow.addLine(to: wings.right)
                     arrow.closeSubpath()
                     context.fill(arrow, with: .color(drawColor))
                 }
@@ -68,21 +76,14 @@ struct EdgeShape: View {
 
                 // Invisible thick hit area for tap detection
                 if onTap != nil {
-                    Path { path in
-                        path.move(to: localSourceExit)
-                        path.addCurve(to: localArrowBase, control1: localCp1, control2: localCp2)
-                    }
-                    .stroke(Color.clear, lineWidth: 12)
-                    .contentShape(
-                        Path { path in
-                            path.move(to: localSourceExit)
-                            path.addCurve(to: localArrowBase, control1: localCp1, control2: localCp2)
+                    curve
+                        .stroke(Color.clear, lineWidth: 12)
+                        .contentShape(
+                            curve.strokedPath(StrokeStyle(lineWidth: 12, lineCap: .round))
+                        )
+                        .onTapGesture {
+                            onTap?()
                         }
-                        .strokedPath(StrokeStyle(lineWidth: 12, lineCap: .round))
-                    )
-                    .onTapGesture {
-                        onTap?()
-                    }
                 }
             }
             .frame(width: bounds.width, height: bounds.height)
@@ -91,16 +92,9 @@ struct EdgeShape: View {
     }
 
     private func computeBounds(_ pts: CurvePoints) -> CGRect {
-        let arrowLeft = CGPoint(
-            x: pts.tip.x - arrowLength * cos(pts.arrowDir - arrowAngle),
-            y: pts.tip.y - arrowLength * sin(pts.arrowDir - arrowAngle)
-        )
-        let arrowRight = CGPoint(
-            x: pts.tip.x - arrowLength * cos(pts.arrowDir + arrowAngle),
-            y: pts.tip.y - arrowLength * sin(pts.arrowDir + arrowAngle)
-        )
+        let wings = arrowWingPoints(tip: pts.tip, dir: pts.arrowDir)
 
-        let allPoints = [pts.sourceExit, pts.arrowBase, pts.cp1, pts.cp2, pts.tip, arrowLeft, arrowRight]
+        let allPoints = [pts.sourceExit, pts.arrowBase, pts.cp1, pts.cp2, pts.tip, wings.left, wings.right]
         let minX = allPoints.map(\.x).min()! - padding
         let minY = allPoints.map(\.y).min()! - padding
         let maxX = allPoints.map(\.x).max()! + padding

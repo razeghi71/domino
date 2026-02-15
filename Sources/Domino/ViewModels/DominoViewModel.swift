@@ -180,7 +180,7 @@ final class DominoViewModel: ObservableObject {
     func nodeAt(point: CGPoint, excluding: UUID) -> UUID? {
         for (id, _) in nodes where id != excluding {
             let pos = effectivePosition(id)
-            let size = nodeSizes[id] ?? CGSize(width: 132, height: 44)
+            let size = nodeSizes[id] ?? NodeDefaults.size
             if abs(point.x - pos.x) <= size.width / 2 && abs(point.y - pos.y) <= size.height / 2 {
                 return id
             }

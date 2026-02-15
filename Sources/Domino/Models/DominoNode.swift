@@ -1,5 +1,9 @@
 import Foundation
 
+enum NodeDefaults {
+    static let size = CGSize(width: 132, height: 44)
+}
+
 struct DominoNode: Identifiable, Equatable, Codable {
     let id: UUID
     var text: String

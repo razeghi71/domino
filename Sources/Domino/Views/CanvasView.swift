@@ -75,8 +75,8 @@ struct CanvasView: View {
                         EdgeShape(
                             from: viewModel.effectivePosition(edge.parent.id),
                             to: viewModel.effectivePosition(edge.child.id),
-                            fromSize: viewModel.nodeSizes[edge.parent.id] ?? CGSize(width: 132, height: 44),
-                            toSize: viewModel.nodeSizes[edge.child.id] ?? CGSize(width: 132, height: 44),
+                            fromSize: viewModel.nodeSizes[edge.parent.id] ?? NodeDefaults.size,
+                            toSize: viewModel.nodeSizes[edge.child.id] ?? NodeDefaults.size,
                             isSelected: viewModel.selectedEdgeID == edge.id,
                             onTap: {
                                 viewModel.commitEditing()
@@ -91,7 +91,7 @@ struct CanvasView: View {
                         EdgeShape(
                             from: viewModel.effectivePosition(drag.sourceNodeID),
                             to: drag.currentPoint,
-                            fromSize: viewModel.nodeSizes[drag.sourceNodeID] ?? CGSize(width: 132, height: 44),
+                            fromSize: viewModel.nodeSizes[drag.sourceNodeID] ?? NodeDefaults.size,
                             color: .accentColor.opacity(0.5),
                             dash: [6, 4]
                         )
