@@ -86,7 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unc
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard let viewModel, viewModel.isDirty else { return true }
-        return DominoViewModel.showDiscardAlert()
+        guard DominoViewModel.showDiscardAlert() else { return false }
+        viewModel.newBoard()
+        return true
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
