@@ -1,10 +1,16 @@
+<div align="center">
+
+<img src="icon.svg" width="128" />
+
 # Domino
 
-A lightweight mind map app for macOS, built with SwiftUI and Swift Package Manager.
+A lightweight mind map app for macOS, built with SwiftUI.
 
-**[Download latest release](https://github.com/razeghi71/domino/releases/latest/download/Domino.zip)**
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge)](https://github.com/razeghi71/domino/releases/latest/download/Domino.zip)
 
 ![Screenshot](screenshot.png)
+
+</div>
 
 ## Features
 
