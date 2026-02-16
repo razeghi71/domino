@@ -2,26 +2,39 @@
 set -euo pipefail
 
 APP_NAME="Domino"
-BUNDLE_ID="com.razeghi.domino"
-VERSION="1.0.0"
-BUILD_DIR=".build/release"
+BUNDLE_ID="no.marz.domino"
+VERSION="${VERSION:-1.0.0}"
 APP_DIR="build/${APP_NAME}.app"
 
-echo "Building release binary..."
-swift build -c release
+# Build universal binary (arm64 + x86_64)
+echo "Building release binary (arm64)..."
+swift build -c release --arch arm64
+
+echo "Building release binary (x86_64)..."
+swift build -c release --arch x86_64
+
+echo "Creating universal binary..."
+mkdir -p .build/universal
+lipo -create \
+    .build/arm64-apple-macosx/release/$APP_NAME \
+    .build/x86_64-apple-macosx/release/$APP_NAME \
+    -output .build/universal/$APP_NAME
 
 echo "Creating app bundle..."
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
-cp "$BUILD_DIR/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp ".build/universal/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "Sources/Domino/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
-# Copy SPM resource bundle if it exists
-if [ -d "$BUILD_DIR/${APP_NAME}_${APP_NAME}.bundle" ]; then
-    cp -R "$BUILD_DIR/${APP_NAME}_${APP_NAME}.bundle" "$APP_DIR/Contents/Resources/"
-fi
+# Copy SPM resource bundle if it exists (check both arch dirs)
+for ARCH_DIR in .build/arm64-apple-macosx/release .build/release; do
+    if [ -d "$ARCH_DIR/${APP_NAME}_${APP_NAME}.bundle" ]; then
+        cp -R "$ARCH_DIR/${APP_NAME}_${APP_NAME}.bundle" "$APP_DIR/Contents/Resources/"
+        break
+    fi
+done
 
 cat > "$APP_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
