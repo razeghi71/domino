@@ -96,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unc
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon
         } else if let icon = NSImage(named: "AppIcon") {

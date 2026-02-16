@@ -28,14 +28,6 @@ mkdir -p "$APP_DIR/Contents/Resources"
 cp ".build/universal/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "Sources/Domino/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
-# Copy SPM resource bundle next to the executable (where Bundle.module expects it)
-for ARCH_DIR in .build/arm64-apple-macosx/release .build/release; do
-    if [ -d "$ARCH_DIR/${APP_NAME}_${APP_NAME}.bundle" ]; then
-        cp -R "$ARCH_DIR/${APP_NAME}_${APP_NAME}.bundle" "$APP_DIR/Contents/MacOS/"
-        break
-    fi
-done
-
 cat > "$APP_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
