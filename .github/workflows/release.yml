@@ -33,7 +33,9 @@ jobs:
 
       - name: Create ZIP
         working-directory: build
-        run: zip -r Domino-${{ steps.version.outputs.VERSION }}.zip Domino.app
+        run: |
+          zip -r Domino-${{ steps.version.outputs.VERSION }}.zip Domino.app
+          cp Domino-${{ steps.version.outputs.VERSION }}.zip Domino.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -43,3 +45,4 @@ jobs:
           files: |
             build/Domino-${{ steps.version.outputs.VERSION }}.dmg
             build/Domino-${{ steps.version.outputs.VERSION }}.zip
+            build/Domino.zip

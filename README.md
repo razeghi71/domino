@@ -2,6 +2,8 @@
 
 A lightweight mind map app for macOS, built with SwiftUI and Swift Package Manager.
 
+**[Download latest release](https://github.com/razeghi71/domino/releases/latest/download/Domino.zip)**
+
 ![Screenshot](screenshot.png)
 
 ## Features
