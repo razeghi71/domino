@@ -62,7 +62,12 @@ struct DominoApp: App {
             }
             CommandGroup(after: .pasteboard) {
                 Button("Delete") {
-                    if viewModel.selectedNodeID != nil {
+                    if viewModel.selectedNodeIDs.count > 1 {
+                        for id in viewModel.selectedNodeIDs {
+                            viewModel.deleteNode(id)
+                        }
+                        viewModel.clearSelection()
+                    } else if viewModel.selectedNodeID != nil {
                         viewModel.deleteSelectedNode()
                     } else if viewModel.selectedEdgeID != nil {
                         viewModel.deleteSelectedEdge()

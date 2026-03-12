@@ -16,6 +16,7 @@ final class DominoViewModel: ObservableObject {
     @Published var nodes: [UUID: DominoNode] = [:]
     @Published var editingNodeID: UUID?
     @Published var selectedNodeID: UUID?
+    @Published var selectedNodeIDs: Set<UUID> = []
     @Published var edgeDrag: EdgeDragState?
     @Published var dropTargetNodeID: UUID?
     @Published var selectedEdgeID: String?
@@ -47,6 +48,7 @@ final class DominoViewModel: ObservableObject {
         nodes = snapshot
         editingNodeID = nil
         selectedNodeID = nil
+        selectedNodeIDs.removeAll()
     }
 
     func redo() {
@@ -55,6 +57,7 @@ final class DominoViewModel: ObservableObject {
         nodes = snapshot
         editingNodeID = nil
         selectedNodeID = nil
+        selectedNodeIDs.removeAll()
     }
 
     var sortedNodes: [DominoNode] {
@@ -206,9 +209,53 @@ final class DominoViewModel: ObservableObject {
         return true
     }
 
+    func clearSelection() {
+        selectedNodeID = nil
+        selectedNodeIDs.removeAll()
+        selectedEdgeID = nil
+    }
+
+    func selectNodesInRect(_ rect: CGRect) {
+        var ids = Set<UUID>()
+        for (id, node) in nodes {
+            let size = nodeSizes[id] ?? NodeDefaults.size
+            let nodeRect = CGRect(
+                x: node.position.x - size.width / 2,
+                y: node.position.y - size.height / 2,
+                width: size.width,
+                height: size.height
+            )
+            if rect.intersects(nodeRect) {
+                ids.insert(id)
+            }
+        }
+        selectedNodeIDs = ids
+        selectedNodeID = ids.first
+    }
+
+    func moveSelectedNodes(by offset: CGSize) {
+        for id in selectedNodeIDs {
+            nodeDragOffset[id] = offset
+        }
+    }
+
+    func commitSelectedNodesMove(by offset: CGSize) {
+        saveSnapshot()
+        for id in selectedNodeIDs {
+            if let node = nodes[id] {
+                nodes[id]?.position = CGPoint(
+                    x: node.position.x + offset.width,
+                    y: node.position.y + offset.height
+                )
+            }
+            nodeDragOffset.removeValue(forKey: id)
+        }
+    }
+
     func deleteSelectedNode() {
         guard let id = selectedNodeID else { return }
         selectedNodeID = nil
+        selectedNodeIDs.remove(id)
         deleteNode(id)
     }
 
@@ -251,6 +298,7 @@ final class DominoViewModel: ObservableObject {
         nodes.removeAll()
         editingNodeID = nil
         selectedNodeID = nil
+        selectedNodeIDs.removeAll()
         selectedEdgeID = nil
         currentFileURL = nil
         undoStack.removeAll()

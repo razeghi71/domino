@@ -13,7 +13,11 @@ struct NodeView: View {
     }
 
     private var isSelected: Bool {
-        viewModel.selectedNodeID == node.id
+        viewModel.selectedNodeID == node.id || viewModel.selectedNodeIDs.contains(node.id)
+    }
+
+    private var isMultiSelected: Bool {
+        viewModel.selectedNodeIDs.contains(node.id)
     }
 
     private var isDropTarget: Bool {
@@ -122,22 +126,31 @@ struct NodeView: View {
                 plusButtons
             }
         }
-        .offset(dragOffset)
+        .offset(isMultiSelected ? (viewModel.nodeDragOffset[node.id] ?? .zero) : dragOffset)
         .gesture(
             isEditing ? nil :
             DragGesture(minimumDistance: 3)
                 .onChanged { value in
-                    dragOffset = value.translation
-                    viewModel.nodeDragOffset[node.id] = value.translation
+                    if isMultiSelected && viewModel.selectedNodeIDs.count > 1 {
+                        // Move entire selection
+                        viewModel.moveSelectedNodes(by: value.translation)
+                    } else {
+                        dragOffset = value.translation
+                        viewModel.nodeDragOffset[node.id] = value.translation
+                    }
                 }
                 .onEnded { value in
-                    let newPosition = CGPoint(
-                        x: node.position.x + value.translation.width,
-                        y: node.position.y + value.translation.height
-                    )
-                    dragOffset = .zero
-                    viewModel.nodeDragOffset.removeValue(forKey: node.id)
-                    viewModel.moveNode(node.id, to: newPosition)
+                    if isMultiSelected && viewModel.selectedNodeIDs.count > 1 {
+                        viewModel.commitSelectedNodesMove(by: value.translation)
+                    } else {
+                        let newPosition = CGPoint(
+                            x: node.position.x + value.translation.width,
+                            y: node.position.y + value.translation.height
+                        )
+                        dragOffset = .zero
+                        viewModel.nodeDragOffset.removeValue(forKey: node.id)
+                        viewModel.moveNode(node.id, to: newPosition)
+                    }
                 }
         )
         .onHover { hovering in
@@ -198,13 +211,31 @@ struct NodeView: View {
                             )
                     )
                     .onTapGesture(count: 1) {
-                        if isSelected {
+                        if NSEvent.modifierFlags.contains(.shift) {
+                            // Shift-click: toggle in multi-selection
+                            if viewModel.selectedNodeIDs.contains(node.id) {
+                                viewModel.selectedNodeIDs.remove(node.id)
+                                if viewModel.selectedNodeID == node.id {
+                                    viewModel.selectedNodeID = viewModel.selectedNodeIDs.first
+                                }
+                            } else {
+                                // If there's a single selected node, promote it to multi-selection
+                                if let existing = viewModel.selectedNodeID, viewModel.selectedNodeIDs.isEmpty {
+                                    viewModel.selectedNodeIDs.insert(existing)
+                                }
+                                viewModel.selectedNodeIDs.insert(node.id)
+                                viewModel.selectedNodeID = node.id
+                            }
+                            viewModel.selectedEdgeID = nil
+                        } else if isSelected && viewModel.selectedNodeIDs.count <= 1 {
                             editText = node.text
                             viewModel.selectedNodeID = nil
+                            viewModel.selectedNodeIDs.removeAll()
                             viewModel.editingNodeID = node.id
                         } else {
                             viewModel.commitEditing()
                             viewModel.selectedNodeID = node.id
+                            viewModel.selectedNodeIDs = [node.id]
                             viewModel.selectedEdgeID = nil
                         }
                     }

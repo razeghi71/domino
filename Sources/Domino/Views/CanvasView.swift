@@ -4,31 +4,50 @@ struct CanvasView: View {
     @ObservedObject var viewModel: DominoViewModel
 
     @State private var panOffset: CGSize = .zero
-    @State private var dragStart: CGSize = .zero
     @State private var scale: CGFloat = 1.0
     @State private var gestureScale: CGFloat = 1.0
 
+    // Rectangle selection state
+    @State private var selectionStart: CGPoint? = nil
+    @State private var selectionEnd: CGPoint? = nil
+
     var body: some View {
         GeometryReader { geo in
-            let totalOffset = CGSize(
-                width: panOffset.width + dragStart.width,
-                height: panOffset.height + dragStart.height
-            )
+            let totalOffset = panOffset
             let currentScale = scale * gestureScale
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
 
             ZStack {
-                // Background - drag to pan, tap to deselect, double-click to create
+                // Background - drag to select, tap to deselect, double-click to create
                 Color(nsColor: .windowBackgroundColor)
                     .contentShape(Rectangle())
                     .gesture(
                         DragGesture(minimumDistance: 3)
                             .onChanged { value in
-                                dragStart = value.translation
+                                if selectionStart == nil {
+                                    selectionStart = value.startLocation
+                                }
+                                selectionEnd = value.location
+
+                                // Convert screen rect to canvas coordinates for live selection
+                                if let start = selectionStart {
+                                    let canvasRect = screenRectToCanvas(
+                                        from: start, to: value.location,
+                                        offset: totalOffset, scale: currentScale, center: center
+                                    )
+                                    viewModel.selectNodesInRect(canvasRect)
+                                }
                             }
                             .onEnded { value in
-                                panOffset.width += value.translation.width
-                                panOffset.height += value.translation.height
-                                dragStart = .zero
+                                if let start = selectionStart {
+                                    let canvasRect = screenRectToCanvas(
+                                        from: start, to: value.location,
+                                        offset: totalOffset, scale: currentScale, center: center
+                                    )
+                                    viewModel.selectNodesInRect(canvasRect)
+                                }
+                                selectionStart = nil
+                                selectionEnd = nil
                             }
                     )
                     .gesture(
@@ -43,9 +62,8 @@ struct CanvasView: View {
                     )
                     .onTapGesture(count: 2) { location in
                         // Convert screen location to canvas coordinates
-                        let canvasPoint = CGPoint(
-                            x: (location.x - totalOffset.width) / currentScale,
-                            y: (location.y - totalOffset.height) / currentScale
+                        let canvasPoint = screenPointToCanvas(
+                            location, offset: totalOffset, scale: currentScale, center: center
                         )
                         viewModel.addNode(at: canvasPoint)
                     }
@@ -53,10 +71,23 @@ struct CanvasView: View {
                         TapGesture()
                             .onEnded {
                                 viewModel.commitEditing()
-                                viewModel.selectedNodeID = nil
-                                viewModel.selectedEdgeID = nil
+                                viewModel.clearSelection()
                             }
                     )
+
+                // Selection rectangle overlay
+                if let start = selectionStart, let end = selectionEnd {
+                    let rect = normalizedRect(from: start, to: end)
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.1))
+                        .overlay(
+                            Rectangle()
+                                .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
+                        )
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                        .allowsHitTesting(false)
+                }
 
                 // Empty state hint
                 if viewModel.nodes.isEmpty {
@@ -81,6 +112,7 @@ struct CanvasView: View {
                             onTap: {
                                 viewModel.commitEditing()
                                 viewModel.selectedNodeID = nil
+                                viewModel.selectedNodeIDs.removeAll()
                                 viewModel.selectedEdgeID = viewModel.selectedEdgeID == edge.id ? nil : edge.id
                             }
                         )
@@ -106,6 +138,11 @@ struct CanvasView: View {
                 .coordinateSpace(name: "canvas")
                 .scaleEffect(currentScale)
                 .offset(totalOffset)
+
+                // Invisible scroll wheel receiver
+                ScrollWheelHandler(panOffset: $panOffset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
             }
         }
         .clipped()
@@ -117,7 +154,6 @@ struct CanvasView: View {
     private func centerOnNodes(viewportSize: CGSize) {
         scale = 1.0
         gestureScale = 1.0
-        dragStart = .zero
         guard !viewModel.nodes.isEmpty else {
             panOffset = .zero
             return
@@ -133,5 +169,31 @@ struct CanvasView: View {
 
     private func clampScale(_ s: CGFloat) -> CGFloat {
         min(max(s, 0.2), 5.0)
+    }
+
+    /// Convert a screen point to canvas coordinates accounting for scaleEffect anchor at center
+    private func screenPointToCanvas(_ point: CGPoint, offset: CGSize, scale: CGFloat, center: CGPoint) -> CGPoint {
+        CGPoint(
+            x: (point.x - center.x - offset.width) / scale + center.x,
+            y: (point.y - center.y - offset.height) / scale + center.y
+        )
+    }
+
+    /// Convert two screen points to a normalized CGRect in canvas coordinates
+    private func screenRectToCanvas(from: CGPoint, to: CGPoint, offset: CGSize, scale: CGFloat, center: CGPoint) -> CGRect {
+        let p1 = screenPointToCanvas(from, offset: offset, scale: scale, center: center)
+        let p2 = screenPointToCanvas(to, offset: offset, scale: scale, center: center)
+        return CGRect(
+            x: min(p1.x, p2.x), y: min(p1.y, p2.y),
+            width: abs(p2.x - p1.x), height: abs(p2.y - p1.y)
+        )
+    }
+
+    /// Normalize two points into a positive-sized rect (for screen overlay)
+    private func normalizedRect(from: CGPoint, to: CGPoint) -> CGRect {
+        CGRect(
+            x: min(from.x, to.x), y: min(from.y, to.y),
+            width: abs(to.x - from.x), height: abs(to.y - from.y)
+        )
     }
 }
