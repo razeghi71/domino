@@ -412,9 +412,21 @@ final class DominoViewModel: ObservableObject {
     }
 
     private struct SnapStop {
+        enum Anchor {
+            case leading
+            case center
+            case trailing
+        }
+
+        let anchor: Anchor
         let value: CGFloat
         let targetNodeID: UUID
         let targetDistance: CGFloat
+    }
+
+    private struct DraggedStop {
+        let anchor: SnapStop.Anchor
+        let value: CGFloat
     }
 
     private struct GapCandidate {
@@ -593,6 +605,7 @@ final class DominoViewModel: ObservableObject {
 
             vertical.append(
                 SnapStop(
+                    anchor: .leading,
                     value: candidate.bounds.minX,
                     targetNodeID: candidate.id,
                     targetDistance: distance
@@ -600,6 +613,7 @@ final class DominoViewModel: ObservableObject {
             )
             vertical.append(
                 SnapStop(
+                    anchor: .center,
                     value: candidate.bounds.midX,
                     targetNodeID: candidate.id,
                     targetDistance: distance
@@ -607,6 +621,7 @@ final class DominoViewModel: ObservableObject {
             )
             vertical.append(
                 SnapStop(
+                    anchor: .trailing,
                     value: candidate.bounds.maxX,
                     targetNodeID: candidate.id,
                     targetDistance: distance
@@ -615,6 +630,7 @@ final class DominoViewModel: ObservableObject {
 
             horizontal.append(
                 SnapStop(
+                    anchor: .leading,
                     value: candidate.bounds.minY,
                     targetNodeID: candidate.id,
                     targetDistance: distance
@@ -622,6 +638,7 @@ final class DominoViewModel: ObservableObject {
             )
             horizontal.append(
                 SnapStop(
+                    anchor: .center,
                     value: candidate.bounds.midY,
                     targetNodeID: candidate.id,
                     targetDistance: distance
@@ -629,6 +646,7 @@ final class DominoViewModel: ObservableObject {
             )
             horizontal.append(
                 SnapStop(
+                    anchor: .trailing,
                     value: candidate.bounds.maxY,
                     targetNodeID: candidate.id,
                     targetDistance: distance
@@ -754,7 +772,7 @@ final class DominoViewModel: ObservableObject {
 
     /// Find best per-axis alignment snap, keeping deterministic tie-breaking and collecting equivalent guide lines.
     private func bestAlignmentSnap(
-        for draggedValues: [CGFloat],
+        for draggedStops: [DraggedStop],
         against stops: [SnapStop],
         axis: AlignmentAxis,
         threshold: CGFloat
@@ -764,9 +782,12 @@ final class DominoViewModel: ObservableObject {
         var bestStop: SnapStop?
         var bestGuides: [SnapGuide] = []
 
-        for draggedValue in draggedValues {
+        // Keep anchor types consistent to avoid unintuitive matches like left edge -> center line.
+        for draggedStop in draggedStops {
             for stop in stops {
-                let delta = stop.value - draggedValue
+                guard stop.anchor == draggedStop.anchor else { continue }
+
+                let delta = stop.value - draggedStop.value
                 let distance = abs(delta)
                 guard distance <= threshold else { continue }
 
@@ -1100,17 +1121,25 @@ final class DominoViewModel: ObservableObject {
         let draggedCenter = CGPoint(x: draggedBounds.midX, y: draggedBounds.midY)
         let stops = buildSnapStops(from: alignmentCandidates, draggedCenter: draggedCenter)
         let gapCandidates = buildGapCandidates(from: gapReferenceCandidates, draggedCenter: draggedCenter)
-        let xValues = [draggedBounds.minX, draggedBounds.midX, draggedBounds.maxX]
-        let yValues = [draggedBounds.minY, draggedBounds.midY, draggedBounds.maxY]
+        let xStops = [
+            DraggedStop(anchor: .leading, value: draggedBounds.minX),
+            DraggedStop(anchor: .center, value: draggedBounds.midX),
+            DraggedStop(anchor: .trailing, value: draggedBounds.maxX),
+        ]
+        let yStops = [
+            DraggedStop(anchor: .leading, value: draggedBounds.minY),
+            DraggedStop(anchor: .center, value: draggedBounds.midY),
+            DraggedStop(anchor: .trailing, value: draggedBounds.maxY),
+        ]
 
         let alignmentX = bestAlignmentSnap(
-            for: xValues,
+            for: xStops,
             against: stops.vertical,
             axis: .vertical,
             threshold: threshold
         )
         let alignmentY = bestAlignmentSnap(
-            for: yValues,
+            for: yStops,
             against: stops.horizontal,
             axis: .horizontal,
             threshold: threshold
