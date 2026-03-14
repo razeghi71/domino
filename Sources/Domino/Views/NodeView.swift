@@ -3,6 +3,7 @@ import SwiftUI
 struct NodeView: View {
     let node: DominoNode
     @ObservedObject var viewModel: DominoViewModel
+    @AppStorage("showNodeRanks") private var showNodeRanks = true
     @State private var isHovering = false
     @State private var editText: String = ""
     @State private var dragOffset: CGSize = .zero
@@ -90,7 +91,7 @@ struct NodeView: View {
                     }
                 )
                 .overlay(alignment: .topLeading) {
-                    if let degree = viewModel.nodeDegrees[node.id] {
+                    if showNodeRanks, let degree = viewModel.nodeDegrees[node.id] {
                         Text("\(degree)")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)

@@ -5,6 +5,7 @@ import AppKit
 struct DominoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var viewModel = DominoViewModel()
+    @AppStorage("showNodeRanks") private var showNodeRanks = true
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -59,6 +60,9 @@ struct DominoApp: App {
                 }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(!viewModel.canRedo)
+            }
+            CommandGroup(after: .toolbar) {
+                Toggle("Show Node Ranks", isOn: $showNodeRanks)
             }
             CommandGroup(after: .pasteboard) {
                 Button("Delete") {
