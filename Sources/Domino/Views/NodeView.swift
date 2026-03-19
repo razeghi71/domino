@@ -93,6 +93,13 @@ struct NodeView: View {
         formatter.timeStyle = .none
         return formatter
     }()
+    private static let budgetFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 0
+        return formatter
+    }()
 
     private static func colorDot(hex: String) -> NSImage {
         let size = NSSize(width: 14, height: 14)
@@ -185,6 +192,21 @@ struct NodeView: View {
                     } else {
                         Button("Set Planned Date") {
                             setPlannedDate(initialDate: nil)
+                        }
+                    }
+
+                    if let budget = node.budget {
+                        Menu("Cost: \(formattedBudget(budget))") {
+                            Button("Change Cost") {
+                                setBudget(initialBudget: budget)
+                            }
+                            Button("Remove Cost", role: .destructive) {
+                                viewModel.setNodeBudgets(contextMenuTargetNodeIDs, budget: nil)
+                            }
+                        }
+                    } else {
+                        Button("Set Cost") {
+                            setBudget(initialBudget: nil)
                         }
                     }
 
@@ -424,6 +446,49 @@ struct NodeView: View {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         return datePicker.dateValue
+    }
+
+    private func setBudget(initialBudget: Double?) {
+        guard let budget = promptForBudget(initialBudget: initialBudget) else { return }
+        viewModel.setNodeBudgets(contextMenuTargetNodeIDs, budget: budget)
+    }
+
+    private func promptForBudget(initialBudget: Double?) -> Double? {
+        let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        inputField.placeholderString = "0.00"
+        if let initialBudget {
+            inputField.stringValue = Self.plainBudgetString(initialBudget)
+        }
+
+        let alert = NSAlert()
+        alert.messageText = initialBudget == nil ? "Set Cost" : "Change Cost"
+        alert.informativeText = "Enter a planned cost for the selected node(s)."
+        alert.accessoryView = inputField
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+
+        let trimmed = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let normalized = trimmed.replacingOccurrences(of: ",", with: "")
+        guard let value = Double(normalized), value.isFinite, value >= 0 else { return nil }
+        return value
+    }
+
+    private func formattedBudget(_ value: Double) -> String {
+        if let formatted = Self.budgetFormatter.string(from: NSNumber(value: value)) {
+            return formatted
+        }
+        return String(format: "$%.2f", value)
+    }
+
+    private static func plainBudgetString(_ value: Double) -> String {
+        if value.rounded() == value {
+            return String(Int(value))
+        }
+        return String(format: "%.2f", value)
     }
 }
 

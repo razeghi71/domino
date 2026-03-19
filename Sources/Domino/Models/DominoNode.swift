@@ -11,6 +11,7 @@ struct DominoNode: Identifiable, Equatable, Codable {
     var parentIDs: Set<UUID>
     var colorHex: String?
     var plannedDate: Date?
+    var budget: Double?
     var isHidden: Bool
 
     init(
@@ -20,6 +21,7 @@ struct DominoNode: Identifiable, Equatable, Codable {
         parentIDs: Set<UUID> = [],
         colorHex: String? = nil,
         plannedDate: Date? = nil,
+        budget: Double? = nil,
         isHidden: Bool = false
     ) {
         self.id = id
@@ -28,6 +30,7 @@ struct DominoNode: Identifiable, Equatable, Codable {
         self.parentIDs = parentIDs
         self.colorHex = colorHex
         self.plannedDate = plannedDate
+        self.budget = budget
         self.isHidden = isHidden
     }
 
@@ -38,6 +41,7 @@ struct DominoNode: Identifiable, Equatable, Codable {
         case parentIDs
         case colorHex
         case plannedDate
+        case budget
         case isHidden
     }
 
@@ -49,6 +53,7 @@ struct DominoNode: Identifiable, Equatable, Codable {
         parentIDs = try container.decode(Set<UUID>.self, forKey: .parentIDs)
         colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex)
         plannedDate = try container.decodeIfPresent(Date.self, forKey: .plannedDate)
+        budget = try container.decodeIfPresent(Double.self, forKey: .budget)
         isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
     }
 }

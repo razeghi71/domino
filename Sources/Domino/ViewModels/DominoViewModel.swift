@@ -241,6 +241,19 @@ final class DominoViewModel: ObservableObject {
         }
     }
 
+    func setNodeBudget(_ id: UUID, budget: Double?) {
+        saveSnapshot()
+        nodes[id]?.budget = budget
+    }
+
+    func setNodeBudgets(_ ids: Set<UUID>, budget: Double?) {
+        guard !ids.isEmpty else { return }
+        saveSnapshot()
+        for id in ids {
+            nodes[id]?.budget = budget
+        }
+    }
+
     func contextMenuTargetNodeIDs(for anchorNodeID: UUID) -> Set<UUID> {
         let selectedSet: Set<UUID>
         if !selectedNodeIDs.isEmpty {
