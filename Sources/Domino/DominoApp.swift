@@ -14,7 +14,7 @@ struct DominoApp: App {
                 .onAppear {
                     appDelegate.viewModel = viewModel
                     if let window = NSApplication.shared.windows.first {
-                        window.delegate = appDelegate
+                        appDelegate.configureWindow(window)
                     }
                 }
         }
@@ -97,14 +97,27 @@ struct DominoApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unchecked Sendable {
     var viewModel: DominoViewModel?
+
+    func configureWindow(_ window: NSWindow) {
+        window.delegate = self
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = false
+        window.toolbarStyle = .unifiedCompact
+    }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard let viewModel, viewModel.isDirty else { return true }
         guard DominoViewModel.showDiscardAlert() else { return false }
         viewModel.newBoard()
         return true
+    }
+
+    func windowDidBecomeMain(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        configureWindow(window)
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -120,7 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unc
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NSApplication.shared.activate(ignoringOtherApps: true)
-            NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
+            if let window = NSApplication.shared.windows.first {
+                self.configureWindow(window)
+                window.makeKeyAndOrderFront(nil)
+            }
         }
     }
 

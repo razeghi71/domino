@@ -37,6 +37,7 @@ private struct CanvasWorkspaceTabs: View {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .fill(selection == mode ? Color.accentColor : Color.clear)
                             }
+                            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
