@@ -28,8 +28,8 @@ struct NodeView: View {
         viewModel.dropTargetNodeID == node.id
     }
 
-    private var highlighted: Bool {
-        isSelected || isDropTarget
+    private var showsSelectionOutline: Bool {
+        isSelected
     }
 
     private var nodeColor: Color? {
@@ -53,24 +53,25 @@ struct NodeView: View {
 
     private let minWidth: CGFloat = 100
     private let cornerRadius: CGFloat = 8
+    private let selectionOutlinePadding: CGFloat = 4
 
     private var borderColor: Color {
         nodeColor ?? .primary
     }
 
     private var borderStroke: Color {
-        highlighted ? borderColor : borderColor.opacity(0.2)
+        isDropTarget ? borderColor : borderColor.opacity(0.2)
     }
 
     private var borderStyle: StrokeStyle {
         StrokeStyle(
-            lineWidth: highlighted ? 1.5 : 1,
+            lineWidth: isDropTarget ? 1.5 : 1,
             dash: (viewModel.showHiddenItems && node.isHidden) ? [6, 4] : []
         )
     }
 
     private var fillColor: Color {
-        if highlighted, let c = nodeColor {
+        if isDropTarget, let c = nodeColor {
             return c.opacity(0.12)
         }
         return (nodeColor ?? .white).opacity(0.08)
@@ -286,6 +287,14 @@ struct NodeView: View {
                         RoundedRectangle(cornerRadius: cornerRadius)
                             .stroke(nodeColor ?? Color.accentColor, lineWidth: 1.5)
                     )
+                    .overlay {
+                        if showsSelectionOutline {
+                            RoundedRectangle(cornerRadius: cornerRadius + selectionOutlinePadding)
+                                .stroke(Color.blue, lineWidth: 2)
+                                .padding(-selectionOutlinePadding)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .onChange(of: editText) { _, newValue in
                         viewModel.updateNodeText(node.id, text: newValue)
                     }
@@ -314,6 +323,14 @@ struct NodeView: View {
                         RoundedRectangle(cornerRadius: cornerRadius)
                             .stroke(borderStroke, style: borderStyle)
                     )
+                    .overlay {
+                        if showsSelectionOutline {
+                            RoundedRectangle(cornerRadius: cornerRadius + selectionOutlinePadding)
+                                .stroke(Color.blue, lineWidth: 2)
+                                .padding(-selectionOutlinePadding)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .onTapGesture(count: 1) {
                         if NSEvent.modifierFlags.contains(.shift) {
                             // Shift-click: toggle in multi-selection
