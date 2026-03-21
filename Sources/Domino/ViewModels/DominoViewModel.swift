@@ -292,6 +292,13 @@ final class DominoViewModel: ObservableObject {
         nodes[id]?.text = text
     }
 
+    /// Persists a full node `text` change with undo support (e.g. table editing).
+    func commitNodeTextIfChanged(_ id: UUID, text: String) {
+        guard nodes[id]?.text != text else { return }
+        saveSnapshot()
+        nodes[id]?.text = text
+    }
+
     func deleteNode(_ id: UUID) {
         saveSnapshot()
         // Reparent children: replace this node with its parents in each child's parentIDs

@@ -80,13 +80,6 @@ struct NodeView: View {
         viewModel.nodeSizes[node.id] ?? NodeDefaults.size
     }
 
-    private static let presetColors: [(name: String, hex: String)] = [
-        ("Green", "61BD4F"),
-        ("Yellow", "F2D600"),
-        ("Orange", "FF9F1A"),
-        ("Red", "EB5A46"),
-        ("Blue", "0079BF"),
-    ]
     private static let plannedDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -146,7 +139,7 @@ struct NodeView: View {
                 }
                 .contextMenu {
                     Menu("Set Color") {
-                        ForEach(Self.presetColors, id: \.hex) { preset in
+                        ForEach(NodeColorPresets.presets, id: \.hex) { preset in
                             Button {
                                 viewModel.setNodeColors(contextMenuTargetNodeIDs, hex: preset.hex)
                             } label: {
@@ -429,23 +422,6 @@ struct NodeView: View {
         guard let pickedDate = promptForPlannedDate(initialDate: initialDate) else { return }
         let normalized = Calendar.current.startOfDay(for: pickedDate)
         viewModel.setNodePlannedDates(contextMenuTargetNodeIDs, date: normalized)
-    }
-
-    private func promptForPlannedDate(initialDate: Date?) -> Date? {
-        let datePicker = NSDatePicker(frame: NSRect(x: 0, y: 0, width: 220, height: 160))
-        datePicker.datePickerElements = .yearMonthDay
-        datePicker.datePickerStyle = .clockAndCalendar
-        datePicker.dateValue = initialDate ?? Date()
-
-        let alert = NSAlert()
-        alert.messageText = initialDate == nil ? "Set Planned Date" : "Change Planned Date"
-        alert.informativeText = "Choose a planned date for this node."
-        alert.accessoryView = datePicker
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        return datePicker.dateValue
     }
 
     private func setBudget(initialBudget: Double?) {
