@@ -14,6 +14,46 @@ private enum CanvasWorkspace: String, CaseIterable, Identifiable {
     }
 }
 
+private struct CanvasWorkspaceTabs: View {
+    @Binding var selection: CanvasWorkspace
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("View")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 4) {
+                ForEach(CanvasWorkspace.allCases) { mode in
+                    Button {
+                        selection = mode
+                    } label: {
+                        Text(mode.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(selection == mode ? .white : .primary)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 6)
+                            .background {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(selection == mode ? Color.accentColor : Color.clear)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.primary.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+        }
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var viewModel: DominoViewModel
     @State private var workspace: CanvasWorkspace = .graph
@@ -22,13 +62,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             HStack {
                 Spacer(minLength: 0)
-                Picker("View", selection: $workspace) {
-                    ForEach(CanvasWorkspace.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
+                CanvasWorkspaceTabs(selection: $workspace)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
