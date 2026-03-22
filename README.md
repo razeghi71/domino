@@ -15,13 +15,13 @@ Plan projects and life on your Mac in one place. Domino lays out goals and tasks
 ## Features
 
 - **Graph canvas** — infinite pan and zoom (zoom follows the pointer); nodes link in a hierarchy you can reshape
-- **Table view** — the same map as rows: text, planned date, budget, color, and visibility
+- **Table view** — the same map as rows: text, planned date, budget, status, and visibility
 - **Planned dates** and **budgets** on nodes
 - **Hide nodes**; **Show Hidden Items** in the menu when you need hidden work back on the canvas
 - **Search** across node text (**⌘F**)
 - **Recenter canvas** after heavy zoom or pan (**⌘0**)
 - **Snapping** — alignment guides, equal-spacing gap guides, and align selected nodes to a shared left, right, top, or bottom edge
-- **Node colors** (presets or custom)
+- **Node statuses** with system-level defaults and optional file-level overrides
 - **Depth ranks** from root nodes (optional via the menu)
 - **Undo/redo** and **save/open** documents as JSON
 
@@ -36,6 +36,12 @@ Run directly from source:
 
 ```
 swift run Domino
+```
+
+Run automated tests (table/status stress):
+
+```
+swift test
 ```
 
 ## Install as macOS App
