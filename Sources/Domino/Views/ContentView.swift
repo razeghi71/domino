@@ -16,42 +16,39 @@ private enum CanvasWorkspace: String, CaseIterable, Identifiable {
 
 private struct CanvasWorkspaceTabs: View {
     @Binding var selection: CanvasWorkspace
+    private let buttonCornerRadius: CGFloat = 7
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text("View")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            ForEach(CanvasWorkspace.allCases) { mode in
+                let isSelected = selection == mode
 
-            HStack(spacing: 4) {
-                ForEach(CanvasWorkspace.allCases) { mode in
-                    Button {
-                        selection = mode
-                    } label: {
-                        Text(mode.title)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(selection == mode ? .white : .primary)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 6)
-                            .background {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(selection == mode ? Color.accentColor : Color.clear)
-                            }
-                            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    selection = mode
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(isSelected ? .white : .primary)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 6)
+                        .background {
+                            RoundedRectangle(cornerRadius: buttonCornerRadius, style: .continuous)
+                                .fill(isSelected ? Color.accentColor : Color.primary.opacity(0.001))
+                        }
                 }
+                .buttonStyle(.plain)
+                .contentShape(RoundedRectangle(cornerRadius: buttonCornerRadius, style: .continuous))
             }
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.primary.opacity(0.08))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
         }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.primary.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -78,6 +75,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .zIndex(1)
 
             Group {
                 switch workspace {
@@ -88,6 +86,7 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .zIndex(0)
         }
         .onChange(of: workspace) { _, newWorkspace in
             guard let selectedNodeID = viewModel.selectedNodeID else { return }

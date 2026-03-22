@@ -316,6 +316,7 @@ struct CanvasView: View {
                         magnifyFocalCanvasPoint = nil
                     }
             )
+            .contentShape(Rectangle())
             .clipped()
         }
         .onChange(of: viewModel.fileLoadID) {
