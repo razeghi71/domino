@@ -12,6 +12,8 @@ struct CanvasView: View {
     @State private var panOffset: CGSize = .zero
     @State private var scale: CGFloat = 1.0
     @State private var gestureScale: CGFloat = 1.0
+    /// Canvas-space point pinned under the pinch location while a magnify gesture is active.
+    @State private var magnifyFocalCanvasPoint: CGPoint?
 
     // Rectangle selection state
     @State private var selectionStart: CGPoint? = nil
@@ -277,24 +279,52 @@ struct CanvasView: View {
             .onChange(of: viewModel.canvasRecenterToken) { _, _ in
                 applyCanvasRecenterIfPending(viewportSize: geo.size)
             }
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .onChanged { value in
+                        let previousCombined = scale * gestureScale
+                        if magnifyFocalCanvasPoint == nil {
+                            magnifyFocalCanvasPoint = screenPointToCanvas(
+                                value.startLocation,
+                                offset: panOffset,
+                                scale: previousCombined,
+                                center: center
+                            )
+                        }
+                        guard let focal = magnifyFocalCanvasPoint else { return }
+                        let nextScale = clampScale(scale * value.magnification)
+                        panOffset = panOffsetKeepingCanvasPointAtScreen(
+                            canvasPoint: focal,
+                            screenAnchor: value.startLocation,
+                            scale: nextScale,
+                            center: center
+                        )
+                        gestureScale = nextScale / scale
+                    }
+                    .onEnded { value in
+                        let nextScale = clampScale(scale * value.magnification)
+                        if let focal = magnifyFocalCanvasPoint {
+                            panOffset = panOffsetKeepingCanvasPointAtScreen(
+                                canvasPoint: focal,
+                                screenAnchor: value.startLocation,
+                                scale: nextScale,
+                                center: center
+                            )
+                        }
+                        scale = nextScale
+                        gestureScale = 1.0
+                        magnifyFocalCanvasPoint = nil
+                    }
+            )
+            .clipped()
         }
-        .simultaneousGesture(
-            MagnifyGesture()
-                .onChanged { value in
-                    gestureScale = value.magnification
-                }
-                .onEnded { value in
-                    scale = clampScale(scale * value.magnification)
-                    gestureScale = 1.0
-                }
-        )
-        .clipped()
         .onChange(of: viewModel.fileLoadID) {
             centerOnNodes(viewportSize: NSApplication.shared.windows.first?.frame.size ?? CGSize(width: 1200, height: 800))
         }
     }
 
     private func centerOnNodes(viewportSize: CGSize) {
+        magnifyFocalCanvasPoint = nil
         scale = 1.0
         gestureScale = 1.0
         guard !viewModel.nodes.isEmpty else {
@@ -315,6 +345,7 @@ struct CanvasView: View {
             return
         }
 
+        magnifyFocalCanvasPoint = nil
         scale = 1.0
         gestureScale = 1.0
         panOffset = CGSize(
@@ -405,6 +436,20 @@ struct CanvasView: View {
 
     private func clampScale(_ s: CGFloat) -> CGFloat {
         min(max(s, 0.2), 5.0)
+    }
+
+    /// Pan offset so `canvasPoint` appears at `screenAnchor` after scaling about `center` (inverse of `screenPointToCanvas`).
+    private func panOffsetKeepingCanvasPointAtScreen(
+        canvasPoint: CGPoint,
+        screenAnchor: CGPoint,
+        scale: CGFloat,
+        center: CGPoint
+    ) -> CGSize {
+        let c = center
+        return CGSize(
+            width: screenAnchor.x - c.x - (canvasPoint.x - c.x) * scale,
+            height: screenAnchor.y - c.y - (canvasPoint.y - c.y) * scale
+        )
     }
 
     /// Convert a screen point to canvas coordinates accounting for scaleEffect anchor at center
