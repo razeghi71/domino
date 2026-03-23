@@ -1,5 +1,19 @@
 import SwiftUI
 
+private enum TopTab: String, CaseIterable, Identifiable {
+    case tasks
+    case finances
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .tasks: "Tasks"
+        case .finances: "Finances"
+        }
+    }
+}
+
 private enum CanvasWorkspace: String, CaseIterable, Identifiable {
     case graph
     case table
@@ -14,19 +28,20 @@ private enum CanvasWorkspace: String, CaseIterable, Identifiable {
     }
 }
 
-private struct CanvasWorkspaceTabs: View {
-    @Binding var selection: CanvasWorkspace
+private struct SegmentedTabs<T: RawRepresentable & CaseIterable & Identifiable & Equatable>: View where T.RawValue == String {
+    @Binding var selection: T
+    let titleFor: (T) -> String
     private let buttonCornerRadius: CGFloat = 7
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(CanvasWorkspace.allCases) { mode in
+            ForEach(Array(T.allCases)) { mode in
                 let isSelected = selection == mode
 
                 Button {
                     selection = mode
                 } label: {
-                    Text(mode.title)
+                    Text(titleFor(mode))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(isSelected ? .white : .primary)
                         .padding(.horizontal, 18)
@@ -55,6 +70,7 @@ private struct CanvasWorkspaceTabs: View {
 package struct ContentView: View {
     @ObservedObject package var viewModel: DominoViewModel
     @Environment(\.openWindow) private var openWindow
+    @State private var topTab: TopTab = .tasks
     @State private var workspace: CanvasWorkspace = .graph
     @State private var isSearchPresented = false
     @State private var searchText = ""
@@ -68,26 +84,17 @@ package struct ContentView: View {
 
     package var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                CanvasWorkspaceTabs(selection: $workspace)
-
-                HStack {
-                    Spacer(minLength: 0)
-                    if isSearchPresented {
-                        searchField
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .zIndex(1)
+            tabBar
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .zIndex(1)
 
             Group {
-                switch workspace {
-                case .graph:
-                    CanvasView(viewModel: viewModel)
-                case .table:
-                    NodesTableView(viewModel: viewModel)
+                switch topTab {
+                case .tasks:
+                    tasksContent
+                case .finances:
+                    FinancesView(viewModel: viewModel)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -122,6 +129,49 @@ package struct ContentView: View {
             dismissSearch()
         }
     }
+
+    // MARK: - Tab Bar
+
+    @ViewBuilder
+    private var tabBar: some View {
+        if topTab == .tasks {
+            HStack {
+                SegmentedTabs(selection: $topTab) { $0.title }
+
+                Spacer(minLength: 0)
+
+                ZStack {
+                    SegmentedTabs(selection: $workspace) { $0.title }
+
+                    HStack {
+                        Spacer(minLength: 0)
+                        if isSearchPresented {
+                            searchField
+                        }
+                    }
+                }
+            }
+        } else {
+            HStack {
+                SegmentedTabs(selection: $topTab) { $0.title }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    // MARK: - Tasks Content
+
+    @ViewBuilder
+    private var tasksContent: some View {
+        switch workspace {
+        case .graph:
+            CanvasView(viewModel: viewModel)
+        case .table:
+            NodesTableView(viewModel: viewModel)
+        }
+    }
+
+    // MARK: - Search
 
     private var searchField: some View {
         HStack(spacing: 8) {

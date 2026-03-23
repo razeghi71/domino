@@ -108,6 +108,8 @@ package final class DominoViewModel: ObservableObject {
     @Published var canvasFocusRequest: NodeFocusRequest?
     @Published var tableFocusRequest: NodeFocusRequest?
     @Published var searchPresentationRequest: SearchPresentationRequest?
+    @Published var financialEntries: [UUID: FinancialEntry] = [:]
+    @Published var financialTransactions: [UUID: FinancialTransaction] = [:]
     /// Incremented to request resetting canvas pan/zoom to the default framing; handled in `CanvasView`.
     @Published private(set) var canvasRecenterToken: UInt64 = 0
 
@@ -681,6 +683,8 @@ package final class DominoViewModel: ObservableObject {
     private struct DecodedBoard {
         let nodes: [DominoNode]
         let fileStatusSettings: DominoStatusSettings?
+        let financialEntries: [FinancialEntry]?
+        let financialTransactions: [FinancialTransaction]?
     }
 
     private struct MigratedNodes {
@@ -696,13 +700,15 @@ package final class DominoViewModel: ObservableObject {
             let migrated = migrateLoadedNodes(document.nodes, baseSettings: explicitFileSettings ?? systemStatusSettings)
             return DecodedBoard(
                 nodes: migrated.nodes,
-                fileStatusSettings: migrated.fileStatusSettings ?? explicitFileSettings
+                fileStatusSettings: migrated.fileStatusSettings ?? explicitFileSettings,
+                financialEntries: document.financialEntries,
+                financialTransactions: document.financialTransactions
             )
         }
 
         guard let legacyNodes = try? decoder.decode([DominoNode].self, from: data) else { return nil }
         let migrated = migrateLoadedNodes(legacyNodes, baseSettings: systemStatusSettings)
-        return DecodedBoard(nodes: migrated.nodes, fileStatusSettings: migrated.fileStatusSettings)
+        return DecodedBoard(nodes: migrated.nodes, fileStatusSettings: migrated.fileStatusSettings, financialEntries: nil, financialTransactions: nil)
     }
 
     private func migrateLoadedNodes(_ loadedNodes: [DominoNode], baseSettings: DominoStatusSettings) -> MigratedNodes {
@@ -1007,6 +1013,8 @@ package final class DominoViewModel: ObservableObject {
 
     package func newBoard() {
         nodes.removeAll()
+        financialEntries.removeAll()
+        financialTransactions.removeAll()
         fileStatusSettings = nil
         editingNodeID = nil
         selectedNodeID = nil
@@ -1047,9 +1055,13 @@ package final class DominoViewModel: ObservableObject {
     private func writeToFile(_ url: URL) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
+        let entries = financialEntries.values.isEmpty ? nil : Array(financialEntries.values)
+        let transactions = financialTransactions.values.isEmpty ? nil : Array(financialTransactions.values)
         let document = DominoDocument(
             nodes: sortedNodes,
-            settings: fileStatusSettings == systemStatusSettings ? nil : fileStatusSettings
+            settings: fileStatusSettings == systemStatusSettings ? nil : fileStatusSettings,
+            financialEntries: entries,
+            financialTransactions: transactions
         )
         guard let data = try? encoder.encode(document) else { return }
         try? data.write(to: url)
@@ -1061,6 +1073,8 @@ package final class DominoViewModel: ObservableObject {
             let loaded = decodeBoard(from: data)
         else { return }
         nodes = Dictionary(uniqueKeysWithValues: loaded.nodes.map { ($0.id, $0) })
+        financialEntries = Dictionary(uniqueKeysWithValues: (loaded.financialEntries ?? []).map { ($0.id, $0) })
+        financialTransactions = Dictionary(uniqueKeysWithValues: (loaded.financialTransactions ?? []).map { ($0.id, $0) })
         fileStatusSettings = loaded.fileStatusSettings
         editingNodeID = nil
         selectedNodeID = nil
@@ -1069,6 +1083,78 @@ package final class DominoViewModel: ObservableObject {
         currentFileURL = url
         isDirty = false
         fileLoadID = UUID()
+    }
+
+    // MARK: - Finances CRUD
+
+    package func addFinancialEntry(_ entry: FinancialEntry) {
+        financialEntries[entry.id] = entry
+        isDirty = true
+    }
+
+    package func updateFinancialEntry(_ entry: FinancialEntry) {
+        financialEntries[entry.id] = entry
+        isDirty = true
+    }
+
+    package func deleteFinancialEntry(_ id: UUID) {
+        financialEntries.removeValue(forKey: id)
+        isDirty = true
+    }
+
+    package func addFinancialTransaction(_ transaction: FinancialTransaction) {
+        financialTransactions[transaction.id] = transaction
+        isDirty = true
+    }
+
+    package func updateFinancialTransaction(_ transaction: FinancialTransaction) {
+        financialTransactions[transaction.id] = transaction
+        isDirty = true
+    }
+
+    package func deleteFinancialTransaction(_ id: UUID) {
+        financialTransactions.removeValue(forKey: id)
+        isDirty = true
+    }
+
+    // MARK: - Finances Queries
+
+    package func transactionsForMonth(month: Int, year: Int, calendar: Calendar = .current) -> [FinancialTransaction] {
+        financialTransactions.values.filter { txn in
+            let comps = calendar.dateComponents([.year, .month], from: txn.date)
+            return comps.year == year && comps.month == month
+        }.sorted { $0.date < $1.date }
+    }
+
+    package func activeEntriesByType(_ type: FinancialEntryType) -> [FinancialEntry] {
+        financialEntries.values.filter { $0.type == type && $0.isActive }
+            .sorted { $0.name < $1.name }
+    }
+
+    /// Returns expected (entry, occurrence date) pairs for a given month based on recurrence rules.
+    package func expectedDues(month: Int, year: Int, calendar: Calendar = .current) -> [(entry: FinancialEntry, date: Date)] {
+        var results: [(entry: FinancialEntry, date: Date)] = []
+        for entry in financialEntries.values where entry.isActive {
+            var rec = entry.recurrence
+            rec.startDate = entry.createdAt
+            let dates = rec.occurrences(in: month, year: year, calendar: calendar)
+            for date in dates {
+                results.append((entry: entry, date: date))
+            }
+        }
+        return results.sorted { $0.date < $1.date }
+    }
+
+    package func monthlySummary(month: Int, year: Int, calendar: Calendar = .current) -> (income: Double, expenses: Double, net: Double) {
+        let transactions = transactionsForMonth(month: month, year: year, calendar: calendar)
+        let income = transactions.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
+        let expenses = transactions.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+        return (income: income, expenses: expenses, net: income - expenses)
+    }
+
+    package func categories() -> [String] {
+        let cats = financialEntries.values.compactMap { $0.category }.filter { !$0.isEmpty }
+        return Array(Set(cats)).sorted()
     }
 
     // MARK: - Alignment / Snapping
