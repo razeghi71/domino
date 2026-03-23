@@ -441,7 +441,7 @@ package struct FinancialEntry: Identifiable, Codable, Equatable {
     var type: FinancialEntryType
     var amount: Double
     var recurrence: Recurrence?
-    var category: String?
+    var tags: [String]
     var isActive: Bool
     var createdAt: Date
 
@@ -451,7 +451,7 @@ package struct FinancialEntry: Identifiable, Codable, Equatable {
         type: FinancialEntryType = .expense,
         amount: Double = 0,
         recurrence: Recurrence? = nil,
-        category: String? = nil,
+        tags: [String] = [],
         isActive: Bool = true,
         createdAt: Date = Date()
     ) {
@@ -460,9 +460,51 @@ package struct FinancialEntry: Identifiable, Codable, Equatable {
         self.type = type
         self.amount = amount
         self.recurrence = recurrence
-        self.category = category
+        self.tags = tags
         self.isActive = isActive
         self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case type
+        case amount
+        case recurrence
+        case tags
+        case category
+        case isActive
+        case createdAt
+    }
+
+    package init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        type = try container.decodeIfPresent(FinancialEntryType.self, forKey: .type) ?? .expense
+        amount = try container.decodeIfPresent(Double.self, forKey: .amount) ?? 0
+        recurrence = try container.decodeIfPresent(Recurrence.self, forKey: .recurrence)
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+
+        if let decodedTags = try container.decodeIfPresent([String].self, forKey: .tags) {
+            tags = Self.normalizedTags(from: decodedTags)
+        } else {
+            let legacyCategory = try container.decodeIfPresent(String.self, forKey: .category)
+            tags = Self.normalizedTags(from: legacyCategory.map { [$0] } ?? [])
+        }
+    }
+
+    package func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(type, forKey: .type)
+        try container.encode(amount, forKey: .amount)
+        try container.encodeIfPresent(recurrence, forKey: .recurrence)
+        try container.encode(Self.normalizedTags(from: tags), forKey: .tags)
+        try container.encode(isActive, forKey: .isActive)
+        try container.encode(createdAt, forKey: .createdAt)
     }
 
     var isRecurring: Bool {
@@ -472,6 +514,20 @@ package struct FinancialEntry: Identifiable, Codable, Equatable {
     var recurrenceDescription: String {
         guard let recurrence else { return "Does not repeat" }
         return recurrence.description
+    }
+
+    private static func normalizedTags(from rawTags: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for rawTag in rawTags {
+            let trimmed = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            normalized.append(trimmed)
+        }
+        return normalized
     }
 }
 

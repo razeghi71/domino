@@ -1158,9 +1158,9 @@ package final class DominoViewModel: ObservableObject {
         return (income: income, expenses: expenses, net: income - expenses)
     }
 
-    package func categories() -> [String] {
-        let cats = financialEntries.values.compactMap { $0.category }.filter { !$0.isEmpty }
-        return Array(Set(cats)).sorted()
+    package func allFinancialTags() -> [String] {
+        let tags = financialEntries.values.flatMap(\.tags).filter { !$0.isEmpty }
+        return Array(Set(tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     // MARK: - Alignment / Snapping

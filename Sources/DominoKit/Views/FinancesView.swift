@@ -195,13 +195,20 @@ private struct EntryRow: View {
                 .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .foregroundStyle(entry.type == .income ? .green : .primary)
 
-            if let category = entry.category, !category.isEmpty {
-                Text(category)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.primary.opacity(0.06)))
+            if !entry.tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(entry.tags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.primary.opacity(0.06)))
+                        }
+                    }
+                }
+                .frame(maxWidth: 160)
             }
 
             Menu {
@@ -253,7 +260,8 @@ private struct EntryEditorView: View {
     @State private var name: String = ""
     @State private var type: FinancialEntryType = .expense
     @State private var amount: String = ""
-    @State private var category: String = ""
+    @State private var tags: [String] = []
+    @State private var tagInput: String = ""
     @State private var isActive: Bool = true
     @State private var eventDate: Date = Date()
 
@@ -343,9 +351,15 @@ private struct EntryEditorView: View {
                     }
                 }
 
-                LabeledContent("Category") {
-                    TextField("Optional", text: $category)
-                        .textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Tags")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    TagInputField(
+                        tags: $tags,
+                        input: $tagInput,
+                        suggestions: tagSuggestions
+                    )
                 }
 
                 Toggle("Active", isOn: $isActive)
@@ -498,7 +512,7 @@ private struct EntryEditorView: View {
         name = entry.name
         type = entry.type
         amount = String(format: "%.2f", entry.amount)
-        category = entry.category ?? ""
+        tags = entry.tags
         isActive = entry.isActive
         eventDate = entry.createdAt
 
@@ -520,7 +534,7 @@ private struct EntryEditorView: View {
             type: type,
             amount: amountValue,
             recurrence: recurrence,
-            category: category.trimmingCharacters(in: .whitespaces).nilIfEmpty,
+            tags: tags,
             isActive: isActive,
             createdAt: eventDate
         )
@@ -531,6 +545,107 @@ private struct EntryEditorView: View {
             viewModel.addFinancialEntry(saved)
         }
         dismiss()
+    }
+
+    private var tagSuggestions: [String] {
+        let existingTags = viewModel.allFinancialTags()
+        let selected = Set(tags.map { normalizedTagKey($0) })
+        let query = tagInput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let base = existingTags.filter { !selected.contains(normalizedTagKey($0)) }
+        guard !query.isEmpty else { return Array(base.prefix(8)) }
+
+        return base
+            .filter { $0.localizedCaseInsensitiveContains(query) }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private func normalizedTagKey(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+}
+
+private struct TagInputField: View {
+    @Binding var tags: [String]
+    @Binding var input: String
+    let suggestions: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(tags, id: \.self) { tag in
+                            HStack(spacing: 4) {
+                                Text(tag)
+                                    .font(.system(size: 12))
+                                Button {
+                                    removeTag(tag)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 9, weight: .semibold))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.primary.opacity(0.08)))
+                        }
+                    }
+                }
+            }
+
+            TextField("Add tag and press Enter", text: $input)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    addTag(input)
+                }
+
+            if !suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(suggestions, id: \.self) { suggestion in
+                            Button {
+                                addTag(suggestion)
+                            } label: {
+                                Text(suggestion)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().stroke(Color.primary.opacity(0.18), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func addTag(_ rawTag: String) {
+        let trimmed = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let key = normalizedTagKey(trimmed)
+        guard !tags.contains(where: { normalizedTagKey($0) == key }) else {
+            input = ""
+            return
+        }
+        tags.append(trimmed)
+        input = ""
+    }
+
+    private func removeTag(_ tag: String) {
+        tags.removeAll { normalizedTagKey($0) == normalizedTagKey(tag) }
+    }
+
+    private func normalizedTagKey(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 }
 
