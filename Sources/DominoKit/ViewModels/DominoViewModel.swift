@@ -98,6 +98,13 @@ package final class DominoViewModel: ObservableObject {
     @Published var activeGuides: [SnapGuide] = []
     @Published var canvasScale: CGFloat = 1.0
     @Published package var showHiddenItems = false
+
+    package enum DoneVisibility: CaseIterable {
+        case showAll
+        case hideChains
+        case hideAll
+    }
+    @Published package var doneVisibility: DoneVisibility = .showAll
     @Published var canvasFocusRequest: NodeFocusRequest?
     @Published var tableFocusRequest: NodeFocusRequest?
     @Published var searchPresentationRequest: SearchPresentationRequest?
@@ -162,7 +169,49 @@ package final class DominoViewModel: ObservableObject {
     }
 
     var visibleNodes: [DominoNode] {
-        sortedNodes.filter { showHiddenItems || !$0.isHidden }
+        let excluded: Set<UUID>
+        switch doneVisibility {
+        case .showAll: excluded = []
+        case .hideChains: excluded = doneChainNodeIDs
+        case .hideAll: excluded = doneNodeIDs
+        }
+        return sortedNodes.filter { node in
+            if !excluded.isEmpty, excluded.contains(node.id) { return false }
+            return showHiddenItems || !node.isHidden
+        }
+    }
+
+    private var doneNodeIDs: Set<UUID> {
+        Set(nodes.filter { $0.value.statusID == DominoStatusSettings.doneStatusID }.map(\.key))
+    }
+
+    private var doneChainNodeIDs: Set<UUID> {
+        var neighbors: [UUID: Set<UUID>] = [:]
+        for (id, node) in nodes {
+            neighbors[id, default: []].formUnion(node.parentIDs)
+            for pid in node.parentIDs {
+                neighbors[pid, default: []].insert(id)
+            }
+        }
+
+        var visited = Set<UUID>()
+        var result = Set<UUID>()
+        for start in nodes.keys {
+            if visited.contains(start) { continue }
+            var stack = [start]
+            var component = Set<UUID>()
+            while let v = stack.popLast() {
+                if !component.insert(v).inserted { continue }
+                for u in neighbors[v] ?? [] where !component.contains(u) {
+                    stack.append(u)
+                }
+            }
+            visited.formUnion(component)
+            if component.allSatisfy({ nodes[$0]?.statusID == DominoStatusSettings.doneStatusID }) {
+                result.formUnion(component)
+            }
+        }
+        return result
     }
 
     /// Table order: repeated “topmost rank‑0 root in what’s left” → whole undirected connected component, nodes sorted by visible rank then canvas position.
@@ -255,6 +304,14 @@ package final class DominoViewModel: ObservableObject {
 
     private func isNodeVisible(_ id: UUID) -> Bool {
         guard let node = nodes[id] else { return false }
+        switch doneVisibility {
+        case .hideAll:
+            if node.statusID == DominoStatusSettings.doneStatusID { return false }
+        case .hideChains:
+            if doneChainNodeIDs.contains(id) { return false }
+        case .showAll:
+            break
+        }
         return showHiddenItems || !node.isHidden
     }
 
@@ -296,10 +353,19 @@ package final class DominoViewModel: ObservableObject {
     }
 
     var edges: [Edge] {
-        nodes.values.flatMap { child in
+        let excluded: Set<UUID>
+        switch doneVisibility {
+        case .showAll: excluded = []
+        case .hideChains: excluded = doneChainNodeIDs
+        case .hideAll: excluded = doneNodeIDs
+        }
+        return nodes.values.flatMap { child in
             child.parentIDs.compactMap { parentID in
                 guard let parent = nodes[parentID] else { return nil }
                 if !showHiddenItems, (child.isHidden || parent.isHidden) {
+                    return nil
+                }
+                if !excluded.isEmpty, excluded.contains(child.id) || excluded.contains(parent.id) {
                     return nil
                 }
                 return Edge(id: "\(parentID)>\(child.id)", parent: parent, child: child)
@@ -499,6 +565,11 @@ package final class DominoViewModel: ObservableObject {
     package func setShowHiddenItems(_ show: Bool) {
         showHiddenItems = show
         pruneSelectionForHiddenItems()
+    }
+
+    package func setDoneVisibility(_ visibility: DoneVisibility) {
+        doneVisibility = visibility
+        pruneSelectionForDoneChains()
     }
 
     func statusDefinition(for statusID: UUID?) -> DominoStatusDefinition {
@@ -820,6 +891,33 @@ package final class DominoViewModel: ObservableObject {
                 let childID = UUID(uuidString: String(parts[1]))
             {
                 if nodes[parentID]?.isHidden == true || nodes[childID]?.isHidden == true {
+                    selectedEdgeID = nil
+                }
+            }
+        }
+    }
+
+    private func pruneSelectionForDoneChains() {
+        let excluded: Set<UUID>
+        switch doneVisibility {
+        case .showAll: return
+        case .hideChains: excluded = doneChainNodeIDs
+        case .hideAll: excluded = doneNodeIDs
+        }
+        guard !excluded.isEmpty else { return }
+
+        selectedNodeIDs = selectedNodeIDs.filter { !excluded.contains($0) }
+        if let selectedNodeID, excluded.contains(selectedNodeID) {
+            self.selectedNodeID = selectedNodeIDs.first
+        }
+
+        if let edgeID = selectedEdgeID {
+            let parts = edgeID.split(separator: ">")
+            if parts.count == 2,
+                let parentID = UUID(uuidString: String(parts[0])),
+                let childID = UUID(uuidString: String(parts[1]))
+            {
+                if excluded.contains(parentID) || excluded.contains(childID) {
                     selectedEdgeID = nil
                 }
             }

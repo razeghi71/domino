@@ -88,6 +88,23 @@ struct DominoApp: App {
                         set: { viewModel.setShowHiddenItems($0) }
                     )
                 )
+                Menu("Done") {
+                    Button {
+                        viewModel.setDoneVisibility(.showAll)
+                    } label: {
+                        Label("Show All", systemImage: viewModel.doneVisibility == .showAll ? "checkmark" : "")
+                    }
+                    Button {
+                        viewModel.setDoneVisibility(.hideChains)
+                    } label: {
+                        Label("Hide Done Chains", systemImage: viewModel.doneVisibility == .hideChains ? "checkmark" : "")
+                    }
+                    Button {
+                        viewModel.setDoneVisibility(.hideAll)
+                    } label: {
+                        Label("Hide Done Nodes", systemImage: viewModel.doneVisibility == .hideAll ? "checkmark" : "")
+                    }
+                }
             }
             CommandGroup(after: .pasteboard) {
                 Button("Delete") {
