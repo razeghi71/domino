@@ -8,3 +8,4 @@ DerivedData/
 *.xcodeproj
 .claude/
 .netrc
+.vscode/launch.json
