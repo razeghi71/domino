@@ -543,6 +543,7 @@ package struct FinancialTransaction: Identifiable, Codable, Equatable {
     var date: Date
     /// The due/occurrence date this transaction covers (may differ from payment date).
     var dueDate: Date
+    var tags: [String]
     var note: String?
 
     package init(
@@ -553,6 +554,7 @@ package struct FinancialTransaction: Identifiable, Codable, Equatable {
         type: FinancialEntryType = .expense,
         date: Date = Date(),
         dueDate: Date = Date(),
+        tags: [String] = [],
         note: String? = nil
     ) {
         self.id = id
@@ -562,6 +564,107 @@ package struct FinancialTransaction: Identifiable, Codable, Equatable {
         self.type = type
         self.date = date
         self.dueDate = dueDate
+        self.tags = Self.normalizedTags(from: tags)
         self.note = note
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case entryID
+        case name
+        case amount
+        case type
+        case date
+        case dueDate
+        case tags
+        case note
+    }
+
+    package init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        entryID = try container.decodeIfPresent(UUID.self, forKey: .entryID)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        amount = try container.decodeIfPresent(Double.self, forKey: .amount) ?? 0
+        type = try container.decodeIfPresent(FinancialEntryType.self, forKey: .type) ?? .expense
+        date = try container.decodeIfPresent(Date.self, forKey: .date) ?? Date()
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate) ?? date
+        tags = Self.normalizedTags(from: try container.decodeIfPresent([String].self, forKey: .tags) ?? [])
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+    }
+
+    package func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(entryID, forKey: .entryID)
+        try container.encode(name, forKey: .name)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(type, forKey: .type)
+        try container.encode(date, forKey: .date)
+        try container.encode(dueDate, forKey: .dueDate)
+        try container.encode(Self.normalizedTags(from: tags), forKey: .tags)
+        try container.encodeIfPresent(note, forKey: .note)
+    }
+
+    private static func normalizedTags(from rawTags: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for rawTag in rawTags {
+            let trimmed = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            normalized.append(trimmed)
+        }
+        return normalized
+    }
+}
+
+// MARK: - Financial Budget
+
+package enum FinancialBudgetPeriod: String, Codable, CaseIterable {
+    case monthly
+}
+
+package struct FinancialBudget: Identifiable, Codable, Equatable {
+    package let id: UUID
+    var name: String
+    var amount: Double
+    var period: FinancialBudgetPeriod
+    var tagKeys: [String]
+    var isActive: Bool
+    var createdAt: Date
+
+    package init(
+        id: UUID = UUID(),
+        name: String = "",
+        amount: Double = 0,
+        period: FinancialBudgetPeriod = .monthly,
+        tagKeys: [String] = [],
+        isActive: Bool = true,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.amount = amount
+        self.period = period
+        self.tagKeys = Self.normalizedTagKeys(from: tagKeys)
+        self.isActive = isActive
+        self.createdAt = createdAt
+    }
+
+    private static func normalizedTagKeys(from tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for rawTag in tags {
+            let trimmed = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            normalized.append(trimmed)
+        }
+        return normalized
     }
 }

@@ -110,6 +110,7 @@ package final class DominoViewModel: ObservableObject {
     @Published var searchPresentationRequest: SearchPresentationRequest?
     @Published var financialEntries: [UUID: FinancialEntry] = [:]
     @Published var financialTransactions: [UUID: FinancialTransaction] = [:]
+    @Published var financialBudgets: [UUID: FinancialBudget] = [:]
     /// Incremented to request resetting canvas pan/zoom to the default framing; handled in `CanvasView`.
     @Published private(set) var canvasRecenterToken: UInt64 = 0
 
@@ -685,6 +686,7 @@ package final class DominoViewModel: ObservableObject {
         let fileStatusSettings: DominoStatusSettings?
         let financialEntries: [FinancialEntry]?
         let financialTransactions: [FinancialTransaction]?
+        let financialBudgets: [FinancialBudget]?
     }
 
     private struct MigratedNodes {
@@ -702,13 +704,20 @@ package final class DominoViewModel: ObservableObject {
                 nodes: migrated.nodes,
                 fileStatusSettings: migrated.fileStatusSettings ?? explicitFileSettings,
                 financialEntries: document.financialEntries,
-                financialTransactions: document.financialTransactions
+                financialTransactions: document.financialTransactions,
+                financialBudgets: document.financialBudgets
             )
         }
 
         guard let legacyNodes = try? decoder.decode([DominoNode].self, from: data) else { return nil }
         let migrated = migrateLoadedNodes(legacyNodes, baseSettings: systemStatusSettings)
-        return DecodedBoard(nodes: migrated.nodes, fileStatusSettings: migrated.fileStatusSettings, financialEntries: nil, financialTransactions: nil)
+        return DecodedBoard(
+            nodes: migrated.nodes,
+            fileStatusSettings: migrated.fileStatusSettings,
+            financialEntries: nil,
+            financialTransactions: nil,
+            financialBudgets: nil
+        )
     }
 
     private func migrateLoadedNodes(_ loadedNodes: [DominoNode], baseSettings: DominoStatusSettings) -> MigratedNodes {
@@ -1015,6 +1024,7 @@ package final class DominoViewModel: ObservableObject {
         nodes.removeAll()
         financialEntries.removeAll()
         financialTransactions.removeAll()
+        financialBudgets.removeAll()
         fileStatusSettings = nil
         editingNodeID = nil
         selectedNodeID = nil
@@ -1057,11 +1067,13 @@ package final class DominoViewModel: ObservableObject {
         encoder.outputFormatting = .prettyPrinted
         let entries = financialEntries.values.isEmpty ? nil : Array(financialEntries.values)
         let transactions = financialTransactions.values.isEmpty ? nil : Array(financialTransactions.values)
+        let budgets = financialBudgets.values.isEmpty ? nil : Array(financialBudgets.values)
         let document = DominoDocument(
             nodes: sortedNodes,
             settings: fileStatusSettings == systemStatusSettings ? nil : fileStatusSettings,
             financialEntries: entries,
-            financialTransactions: transactions
+            financialTransactions: transactions,
+            financialBudgets: budgets
         )
         guard let data = try? encoder.encode(document) else { return }
         try? data.write(to: url)
@@ -1075,6 +1087,8 @@ package final class DominoViewModel: ObservableObject {
         nodes = Dictionary(uniqueKeysWithValues: loaded.nodes.map { ($0.id, $0) })
         financialEntries = Dictionary(uniqueKeysWithValues: (loaded.financialEntries ?? []).map { ($0.id, $0) })
         financialTransactions = Dictionary(uniqueKeysWithValues: (loaded.financialTransactions ?? []).map { ($0.id, $0) })
+        financialBudgets = Dictionary(uniqueKeysWithValues: (loaded.financialBudgets ?? []).map { ($0.id, $0) })
+        backfillTransactionTagsFromEntriesIfNeeded()
         fileStatusSettings = loaded.fileStatusSettings
         editingNodeID = nil
         selectedNodeID = nil
@@ -1114,6 +1128,21 @@ package final class DominoViewModel: ObservableObject {
 
     package func deleteFinancialTransaction(_ id: UUID) {
         financialTransactions.removeValue(forKey: id)
+        isDirty = true
+    }
+
+    package func addFinancialBudget(_ budget: FinancialBudget) {
+        financialBudgets[budget.id] = budget
+        isDirty = true
+    }
+
+    package func updateFinancialBudget(_ budget: FinancialBudget) {
+        financialBudgets[budget.id] = budget
+        isDirty = true
+    }
+
+    package func deleteFinancialBudget(_ id: UUID) {
+        financialBudgets.removeValue(forKey: id)
         isDirty = true
     }
 
@@ -1161,6 +1190,90 @@ package final class DominoViewModel: ObservableObject {
     package func allFinancialTags() -> [String] {
         let tags = financialEntries.values.flatMap(\.tags).filter { !$0.isEmpty }
         return Array(Set(tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    package func allTransactionTags() -> [String] {
+        let tags = financialTransactions.values.flatMap(\.tags).filter { !$0.isEmpty }
+        return Array(Set(tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    package func allBudgetTags() -> [String] {
+        let tags = financialBudgets.values.flatMap(\.tagKeys).filter { !$0.isEmpty }
+        return Array(Set(tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    package func budgetBreakdownForMonth(month: Int, year: Int, calendar: Calendar = .current) -> [(budget: FinancialBudget, spent: Double, remaining: Double)] {
+        let txns = transactionsForMonth(month: month, year: year, calendar: calendar).filter { $0.type == .expense }
+        let rows = financialBudgets.values
+            .filter { $0.isActive && $0.period == .monthly }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .map { budget -> (budget: FinancialBudget, spent: Double, remaining: Double) in
+                let spent = txns.reduce(0.0) { partial, txn in
+                    return partial + (transaction(txn, matches: budget) ? txn.amount : 0)
+                }
+                return (budget: budget, spent: spent, remaining: budget.amount - spent)
+            }
+        return rows
+    }
+
+    package func unbudgetedExpenseForMonth(month: Int, year: Int, calendar: Calendar = .current) -> Double {
+        let activeBudgets = financialBudgets.values.filter { $0.isActive && $0.period == .monthly }
+        guard !activeBudgets.isEmpty else { return 0 }
+        let txns = transactionsForMonth(month: month, year: year, calendar: calendar).filter { $0.type == .expense }
+        return txns.reduce(0.0) { partial, txn in
+            let matched = activeBudgets.contains { transaction(txn, matches: $0) }
+            return partial + (matched ? 0 : txn.amount)
+        }
+    }
+
+    package func matchingBudgets(forTransactionTags tags: [String]) -> [FinancialBudget] {
+        let normalized = Set(tags.map(normalizedTagKey))
+        guard !normalized.isEmpty else { return [] }
+        return financialBudgets.values
+            .filter { $0.isActive && !$0.tagKeys.isEmpty }
+            .filter { budget in
+                !Set(budget.tagKeys.map(normalizedTagKey)).isDisjoint(with: normalized)
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    package func conflictingBudgetNames(for budget: FinancialBudget) -> [String] {
+        let targetTags = Set(budget.tagKeys.map(normalizedTagKey))
+        guard !targetTags.isEmpty else { return [] }
+        return financialBudgets.values
+            .filter { $0.id != budget.id && $0.isActive }
+            .filter { other in
+                let otherTags = Set(other.tagKeys.map(normalizedTagKey))
+                return !targetTags.isDisjoint(with: otherTags)
+            }
+            .map(\.name)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func transaction(_ txn: FinancialTransaction, matches budget: FinancialBudget) -> Bool {
+        let transactionTags = Set(txn.tags.map(normalizedTagKey))
+        if transactionTags.isEmpty { return false }
+        let budgetTags = Set(budget.tagKeys.map(normalizedTagKey))
+        return !transactionTags.isDisjoint(with: budgetTags)
+    }
+
+    private func normalizedTagKey(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
+    private func backfillTransactionTagsFromEntriesIfNeeded() {
+        var changed = false
+        for id in financialTransactions.keys {
+            guard var txn = financialTransactions[id], txn.tags.isEmpty else { continue }
+            guard let entryID = txn.entryID, let entry = financialEntries[entryID], !entry.tags.isEmpty else { continue }
+            txn.tags = entry.tags
+            financialTransactions[id] = txn
+            changed = true
+        }
+        if changed {
+            isDirty = true
+        }
     }
 
     // MARK: - Alignment / Snapping

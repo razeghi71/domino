@@ -5,6 +5,7 @@ import SwiftUI
 private enum FinancesTab: String, CaseIterable, Identifiable {
     case entries
     case transactions
+    case budgets
     case summary
     case upcoming
 
@@ -14,6 +15,7 @@ private enum FinancesTab: String, CaseIterable, Identifiable {
         switch self {
         case .entries: "Entries"
         case .transactions: "Transactions"
+        case .budgets: "Budgets"
         case .summary: "Summary"
         case .upcoming: "Upcoming"
         }
@@ -23,6 +25,7 @@ private enum FinancesTab: String, CaseIterable, Identifiable {
         switch self {
         case .entries: "list.bullet.rectangle"
         case .transactions: "arrow.left.arrow.right"
+        case .budgets: "wallet.bifold"
         case .summary: "chart.pie"
         case .upcoming: "calendar"
         }
@@ -86,6 +89,8 @@ package struct FinancesView: View {
             EntriesListView(viewModel: viewModel)
         case .transactions:
             TransactionsListView(viewModel: viewModel)
+        case .budgets:
+            BudgetsListView(viewModel: viewModel)
         case .summary:
             MonthlySummaryView(viewModel: viewModel)
         case .upcoming:
@@ -605,6 +610,18 @@ private struct TagInputField: View {
                 .onSubmit {
                     addTag(input)
                 }
+
+            HStack(spacing: 8) {
+                Button("Add Tag") {
+                    addTag(input)
+                }
+                .buttonStyle(.bordered)
+                .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Text("You can create new tags here.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
 
             if !suggestions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -1150,6 +1167,8 @@ private struct TransactionEditorView: View {
     @State private var selectedDueDate: Date = Date()
     @State private var note: String = ""
     @State private var selectedEntryID: UUID?
+    @State private var tags: [String] = []
+    @State private var tagInput: String = ""
 
     var isEditing: Bool { transaction != nil }
 
@@ -1161,7 +1180,7 @@ private struct TransactionEditorView: View {
                 form.padding(16)
             }
         }
-        .frame(width: 460, height: selectedEntryID != nil ? 480 : 400)
+        .frame(width: 460, height: selectedEntryID != nil ? 560 : 500)
         .onAppear { loadTransaction() }
     }
 
@@ -1196,6 +1215,7 @@ private struct TransactionEditorView: View {
                     name = entry.name
                     type = entry.type
                     amount = String(format: "%.2f", entry.amount)
+                    tags = entry.tags
                     if !entry.isRecurring {
                         selectedDueDate = entry.createdAt
                     } else {
@@ -1234,9 +1254,43 @@ private struct TransactionEditorView: View {
 
             DatePicker("Payment date", selection: $date, displayedComponents: .date)
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Tags")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                TagInputField(
+                    tags: $tags,
+                    input: $tagInput,
+                    suggestions: tagSuggestions
+                )
+            }
+
+            budgetImpactView
+
             LabeledContent("Note") {
                 TextField("Optional", text: $note)
                     .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
+    private var budgetImpactView: some View {
+        let matching = viewModel.matchingBudgets(forTransactionTags: tags)
+        let overNames = projectedOverBudgetNames
+        return VStack(alignment: .leading, spacing: 4) {
+            if matching.isEmpty {
+                Text("No matching budget")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Counts toward: \(matching.map(\.name).joined(separator: ", "))")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            if !overNames.isEmpty {
+                Text("This transaction would exceed: \(overNames.joined(separator: ", "))")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.orange)
             }
         }
     }
@@ -1300,6 +1354,7 @@ private struct TransactionEditorView: View {
             amount = String(format: "%.2f", txn.amount)
             date = txn.date
             selectedDueDate = txn.dueDate
+            tags = txn.tags
             note = txn.note ?? ""
             selectedEntryID = txn.entryID
             if let entryID = txn.entryID, let entry = viewModel.financialEntries[entryID], entry.isRecurring {
@@ -1318,6 +1373,7 @@ private struct TransactionEditorView: View {
                 name = entry.name
                 type = entry.type
                 amount = String(format: "%.2f", entry.amount)
+                tags = entry.tags
             }
             if let prefilled = prefilledDueDate {
                 selectedDueDate = prefilled
@@ -1346,6 +1402,7 @@ private struct TransactionEditorView: View {
             type: type,
             date: date,
             dueDate: selectedDueDate,
+            tags: tags,
             note: note.trimmingCharacters(in: .whitespaces).nilIfEmpty
         )
 
@@ -1355,6 +1412,381 @@ private struct TransactionEditorView: View {
             viewModel.addFinancialTransaction(saved)
         }
         dismiss()
+    }
+
+    private var tagSuggestions: [String] {
+        let existingTags = (viewModel.allFinancialTags() + viewModel.allTransactionTags() + viewModel.allBudgetTags())
+        let selected = Set(tags.map { normalizedTagKey($0) })
+        let query = tagInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = Array(Set(existingTags)).filter { !selected.contains(normalizedTagKey($0)) }
+        guard !query.isEmpty else { return Array(base.prefix(8)) }
+
+        return base
+            .filter { $0.localizedCaseInsensitiveContains(query) }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private var projectedOverBudgetNames: [String] {
+        guard type == .expense else { return [] }
+        let amountValue = Double(amount.replacingOccurrences(of: ",", with: "")) ?? 0
+        guard amountValue > 0 else { return [] }
+        let comps = Calendar.current.dateComponents([.year, .month], from: date)
+        let month = comps.month ?? defaultMonth
+        let year = comps.year ?? defaultYear
+        let breakdown = Dictionary(uniqueKeysWithValues: viewModel
+            .budgetBreakdownForMonth(month: month, year: year)
+            .map { ($0.budget.id, $0) })
+        return viewModel.matchingBudgets(forTransactionTags: tags).compactMap { budget in
+            guard let row = breakdown[budget.id] else { return nil }
+            return row.spent + amountValue > budget.amount ? budget.name : nil
+        }
+    }
+
+    private func normalizedTagKey(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+}
+
+// MARK: - Budgets
+
+private struct BudgetsListView: View {
+    @ObservedObject var viewModel: DominoViewModel
+    @State private var showingAddBudget = false
+    @State private var editingBudget: FinancialBudget?
+    @State private var month: Int
+    @State private var year: Int
+
+    init(viewModel: DominoViewModel) {
+        self.viewModel = viewModel
+        let now = Date()
+        let comps = Calendar.current.dateComponents([.year, .month], from: now)
+        _month = State(initialValue: comps.month ?? 1)
+        _year = State(initialValue: comps.year ?? 2026)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            budgetsList
+        }
+        .sheet(isPresented: $showingAddBudget) {
+            BudgetEditorView(viewModel: viewModel, budget: nil)
+        }
+        .sheet(item: $editingBudget) { budget in
+            BudgetEditorView(viewModel: viewModel, budget: budget)
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Budgets")
+                .font(.system(size: 16, weight: .semibold))
+
+            Spacer()
+            monthPicker
+
+            Button {
+                showingAddBudget = true
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(12)
+    }
+
+    private var monthPicker: some View {
+        HStack(spacing: 4) {
+            Button {
+                previousMonth()
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.borderless)
+
+            Text(monthYearLabel)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 120)
+
+            Button {
+                nextMonth()
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private var monthYearLabel: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        let comps = DateComponents(year: year, month: month, day: 1)
+        guard let date = Calendar.current.date(from: comps) else { return "" }
+        return formatter.string(from: date)
+    }
+
+    private func previousMonth() {
+        month -= 1
+        if month < 1 { month = 12; year -= 1 }
+    }
+
+    private func nextMonth() {
+        month += 1
+        if month > 12 { month = 1; year += 1 }
+    }
+
+    private var budgetsList: some View {
+        let rows = viewModel.budgetBreakdownForMonth(month: month, year: year)
+        let unbudgeted = viewModel.unbudgetedExpenseForMonth(month: month, year: year)
+        return ScrollView {
+            LazyVStack(spacing: 10) {
+                if rows.isEmpty {
+                    VStack(spacing: 8) {
+                        Spacer().frame(height: 60)
+                        Image(systemName: "tray")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                        Text("No budgets yet")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    ForEach(rows, id: \.budget.id) { row in
+                        BudgetProgressRow(
+                            row: row,
+                            onEdit: { editingBudget = row.budget },
+                            onDelete: { viewModel.deleteFinancialBudget(row.budget.id) }
+                        )
+                    }
+                }
+
+                if unbudgeted > 0 {
+                    HStack {
+                        Text("Unbudgeted spend")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(formatAmount(unbudgeted))
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    private func formatAmount(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        let value = formatter.string(from: NSNumber(value: abs(amount))) ?? "\(abs(amount))"
+        return amount < 0 ? "-$\(value)" : "$\(value)"
+    }
+}
+
+private struct BudgetProgressRow: View {
+    let row: (budget: FinancialBudget, spent: Double, remaining: Double)
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    private var ratio: Double {
+        guard row.budget.amount > 0 else { return 0 }
+        return row.spent / row.budget.amount
+    }
+
+    private var barColor: Color {
+        if ratio >= 1.0 { return .red }
+        if ratio >= 0.8 { return .orange }
+        return .green
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.budget.name.isEmpty ? "Untitled Budget" : row.budget.name)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(row.budget.tagKeys.joined(separator: ", "))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(formatAmount(row.spent)) / \(formatAmount(row.budget.amount))")
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    Text("Remaining: \(formatAmount(row.remaining))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(row.remaining < 0 ? .red : .secondary)
+                }
+
+                Menu {
+                    Button("Edit") { onEdit() }
+                    Button("Delete", role: .destructive) { onDelete() }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+            }
+
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let progress = max(0, min(1, ratio))
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(barColor)
+                        .frame(width: width * progress)
+                }
+            }
+            .frame(height: 8)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.04)))
+    }
+
+    private func formatAmount(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        let value = formatter.string(from: NSNumber(value: abs(amount))) ?? "\(abs(amount))"
+        return amount < 0 ? "-$\(value)" : "$\(value)"
+    }
+}
+
+private struct BudgetEditorView: View {
+    @ObservedObject var viewModel: DominoViewModel
+    let budget: FinancialBudget?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var amount = ""
+    @State private var tags: [String] = []
+    @State private var tagInput = ""
+    @State private var isActive = true
+    @State private var validationMessage: String?
+
+    private var isEditing: Bool { budget != nil }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(isEditing ? "Edit Budget" : "New Budget")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.borderless)
+                Button("Save") { save() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || tags.isEmpty)
+            }
+            .padding(12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    LabeledContent("Name") {
+                        TextField("e.g. Groceries", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    LabeledContent("Amount") {
+                        HStack(spacing: 2) {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $amount)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Tags")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        TagInputField(
+                            tags: $tags,
+                            input: $tagInput,
+                            suggestions: tagSuggestions
+                        )
+                    }
+
+                    Toggle("Active", isOn: $isActive)
+
+                    if let validationMessage {
+                        Text(validationMessage)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .frame(width: 420, height: 360)
+        .onAppear { loadBudget() }
+    }
+
+    private var tagSuggestions: [String] {
+        let existingTags = (viewModel.allFinancialTags() + viewModel.allTransactionTags() + viewModel.allBudgetTags())
+        let selected = Set(tags.map { normalizedTagKey($0) })
+        let query = tagInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = Array(Set(existingTags)).filter { !selected.contains(normalizedTagKey($0)) }
+        guard !query.isEmpty else { return Array(base.prefix(8)) }
+        return base
+            .filter { $0.localizedCaseInsensitiveContains(query) }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private func loadBudget() {
+        guard let budget else { return }
+        name = budget.name
+        amount = String(format: "%.2f", budget.amount)
+        tags = budget.tagKeys
+        isActive = budget.isActive
+    }
+
+    private func save() {
+        let amountValue = Double(amount.replacingOccurrences(of: ",", with: "")) ?? 0
+        let saved = FinancialBudget(
+            id: budget?.id ?? UUID(),
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: amountValue,
+            period: .monthly,
+            tagKeys: tags,
+            isActive: isActive,
+            createdAt: budget?.createdAt ?? Date()
+        )
+        let conflicts = viewModel.conflictingBudgetNames(for: saved)
+        if !conflicts.isEmpty {
+            validationMessage = "Overlapping tags with: \(conflicts.joined(separator: ", "))"
+            return
+        }
+        if isEditing {
+            viewModel.updateFinancialBudget(saved)
+        } else {
+            viewModel.addFinancialBudget(saved)
+        }
+        dismiss()
+    }
+
+    private func normalizedTagKey(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 }
 
@@ -1433,6 +1865,14 @@ private struct MonthlySummaryView: View {
         viewModel.monthlySummary(month: month, year: year)
     }
 
+    private var budgetRows: [(budget: FinancialBudget, spent: Double, remaining: Double)] {
+        viewModel.budgetBreakdownForMonth(month: month, year: year)
+    }
+
+    private var unbudgetedSpend: Double {
+        viewModel.unbudgetedExpenseForMonth(month: month, year: year)
+    }
+
     private var summaryContent: some View {
         VStack(spacing: 20) {
             HStack(spacing: 16) {
@@ -1470,6 +1910,39 @@ private struct MonthlySummaryView: View {
                             Text(formatAmount(due.entry.amount))
                                 .font(.system(size: 13, design: .monospaced))
                                 .foregroundStyle(due.entry.type == .income ? .green : .primary)
+                        }
+                    }
+                }
+            }
+
+            if !budgetRows.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Budget Health")
+                        .font(.system(size: 14, weight: .semibold))
+
+                    ForEach(budgetRows, id: \.budget.id) { row in
+                        HStack {
+                            Text(row.budget.name)
+                                .font(.system(size: 13))
+                            Spacer()
+                            Text("\(formatAmount(row.spent)) / \(formatAmount(row.budget.amount))")
+                                .font(.system(size: 12, design: .monospaced))
+                            Text("Remaining \(formatAmount(row.remaining))")
+                                .font(.system(size: 11))
+                                .foregroundStyle(row.remaining < 0 ? .red : .secondary)
+                        }
+                    }
+
+                    if unbudgetedSpend > 0 {
+                        HStack {
+                            Text("Unbudgeted spend")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(formatAmount(unbudgetedSpend))
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.orange)
                         }
                     }
                 }

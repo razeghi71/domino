@@ -140,18 +140,21 @@ struct DominoDocument: Codable {
     var settings: DominoStatusSettings?
     var financialEntries: [FinancialEntry]?
     var financialTransactions: [FinancialTransaction]?
+    var financialBudgets: [FinancialBudget]?
 
     init(
         format: Int = 3,
         nodes: [DominoNode],
         settings: DominoStatusSettings?,
         financialEntries: [FinancialEntry]? = nil,
-        financialTransactions: [FinancialTransaction]? = nil
+        financialTransactions: [FinancialTransaction]? = nil,
+        financialBudgets: [FinancialBudget]? = nil
     ) {
         self.format = format
         self.nodes = nodes
         self.settings = settings
         self.financialEntries = financialEntries
         self.financialTransactions = financialTransactions
+        self.financialBudgets = financialBudgets
     }
 }
