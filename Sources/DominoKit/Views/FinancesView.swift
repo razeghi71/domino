@@ -59,6 +59,7 @@ package struct FinancesView: View {
                         Text(tab.title)
                         Spacer()
                     }
+                    .contentShape(Rectangle())
                     .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
                     .foregroundStyle(selectedTab == tab ? Color.accentColor : .primary)
                     .padding(.horizontal, 12)
