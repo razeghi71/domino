@@ -149,11 +149,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unc
         window.backgroundColor = AppColors.canvasBackground
     }
 
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
+    /// If the document has unsaved changes, prompts to discard; clears state when the user discards.
+    /// Returns whether it is OK to proceed (close window or quit app).
+    private func confirmDiscardDocumentIfNeededForCloseOrQuit() -> Bool {
         guard let viewModel, viewModel.isDirty else { return true }
-        guard DominoViewModel.showDiscardAlert() else { return false }
+        guard DominoViewModel.showDiscardConfirmation(
+            informativeText: DominoViewModel.documentDiscardInformativeText
+        ) else { return false }
         viewModel.newBoard()
         return true
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        confirmDiscardDocumentIfNeededForCloseOrQuit()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        confirmDiscardDocumentIfNeededForCloseOrQuit() ? .terminateNow : .terminateCancel
     }
 
     func windowDidBecomeMain(_ notification: Notification) {

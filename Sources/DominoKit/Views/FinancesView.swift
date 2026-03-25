@@ -242,6 +242,16 @@ private enum RecurrencePreset: Hashable {
     case custom
 }
 
+private struct ScheduledTransactionDraftBaseline: Equatable {
+    var name: String
+    var type: ScheduledTransactionType
+    var amount: Double
+    var tags: [String]
+    var isActive: Bool
+    var eventDate: Date
+    var recurrence: Recurrence?
+}
+
 private struct ScheduledTransactionEditorView: View {
     @ObservedObject var viewModel: DominoViewModel
     let scheduledTransaction: ScheduledTransaction?
@@ -260,8 +270,14 @@ private struct ScheduledTransactionEditorView: View {
     @State private var customRecurrence: Recurrence?
     @State private var showCustomRecurrence = false
     @State private var previousPreset: RecurrencePreset = .doesNotRepeat
+    @State private var draftBaseline: ScheduledTransactionDraftBaseline?
 
     var isEditing: Bool { scheduledTransaction != nil }
+
+    private var hasUnsavedDraft: Bool {
+        guard let draftBaseline else { return false }
+        return currentDraftSnapshot() != draftBaseline
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -271,6 +287,7 @@ private struct ScheduledTransactionEditorView: View {
                 .padding(16)
         }
         .frame(width: 480, height: 440)
+        .interactiveDismissDisabled(hasUnsavedDraft)
         .onAppear { loadScheduledTransaction() }
         .onChange(of: selectedPreset) { old, new in
             if new == .custom {
@@ -305,13 +322,48 @@ private struct ScheduledTransactionEditorView: View {
             Text(isEditing ? "Edit scheduled transaction" : "New scheduled transaction")
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
-            Button("Cancel") { dismiss() }
+            Button("Cancel") { cancelEditing() }
                 .buttonStyle(.borderless)
             Button("Save") { save() }
                 .buttonStyle(.borderedProminent)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(12)
+    }
+
+    private func normalizedRecurrenceForDraft() -> Recurrence? {
+        var r = buildRecurrence()
+        r?.startDate = eventDate
+        return r
+    }
+
+    private func currentDraftSnapshot() -> ScheduledTransactionDraftBaseline {
+        ScheduledTransactionDraftBaseline(
+            name: name.trimmingCharacters(in: .whitespaces),
+            type: type,
+            amount: Double(amount.replacingOccurrences(of: ",", with: "")) ?? 0,
+            tags: tags,
+            isActive: isActive,
+            eventDate: eventDate,
+            recurrence: normalizedRecurrenceForDraft()
+        )
+    }
+
+    private func captureDraftBaseline() {
+        draftBaseline = currentDraftSnapshot()
+    }
+
+    private func cancelEditing() {
+        guard hasUnsavedDraft else {
+            dismiss()
+            return
+        }
+        if DominoViewModel.showDiscardConfirmation(
+            messageText: "Discard changes?",
+            informativeText: "Your edits to this scheduled transaction will be lost."
+        ) {
+            dismiss()
+        }
     }
 
     private var form: some View {
@@ -499,19 +551,21 @@ private struct ScheduledTransactionEditorView: View {
     // MARK: - Load / Save
 
     private func loadScheduledTransaction() {
-        guard let scheduledTransaction else { return }
-        name = scheduledTransaction.name
-        type = scheduledTransaction.type
-        amount = String(format: "%.2f", scheduledTransaction.amount)
-        tags = scheduledTransaction.tags
-        isActive = scheduledTransaction.isActive
-        eventDate = scheduledTransaction.createdAt
+        if let scheduledTransaction {
+            name = scheduledTransaction.name
+            type = scheduledTransaction.type
+            amount = String(format: "%.2f", scheduledTransaction.amount)
+            tags = scheduledTransaction.tags
+            isActive = scheduledTransaction.isActive
+            eventDate = scheduledTransaction.createdAt
 
-        let preset = presetForRecurrence(scheduledTransaction.recurrence)
-        selectedPreset = preset
-        if preset == .custom {
-            customRecurrence = scheduledTransaction.recurrence
+            let preset = presetForRecurrence(scheduledTransaction.recurrence)
+            selectedPreset = preset
+            if preset == .custom {
+                customRecurrence = scheduledTransaction.recurrence
+            }
         }
+        captureDraftBaseline()
     }
 
     private func save() {
@@ -678,10 +732,16 @@ private struct CustomRecurrenceSheet: View {
     @State private var endMode: RecurrenceEndMode = .never
     @State private var endDate: Date = Date().addingTimeInterval(90 * 24 * 3600)
     @State private var endCount: Int = 13
+    @State private var recurrenceBaseline: Recurrence?
 
     private enum MonthDayMode: String, CaseIterable {
         case dayOfMonth
         case weekdayOfMonth
+    }
+
+    private var hasUnsavedCustomRecurrenceDraft: Bool {
+        guard let recurrenceBaseline else { return false }
+        return buildRecurrence() != recurrenceBaseline
     }
 
     var body: some View {
@@ -718,7 +778,7 @@ private struct CustomRecurrenceSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { onCancel() }
+                Button("Cancel") { cancelCustomRecurrence() }
                     .buttonStyle(.borderless)
                 Button("Done") { onSave(buildRecurrence()) }
                     .buttonStyle(.borderedProminent)
@@ -726,7 +786,21 @@ private struct CustomRecurrenceSheet: View {
             .padding(16)
         }
         .frame(width: 400, height: 420)
+        .interactiveDismissDisabled(hasUnsavedCustomRecurrenceDraft)
         .onAppear { loadInitial() }
+    }
+
+    private func cancelCustomRecurrence() {
+        guard hasUnsavedCustomRecurrenceDraft else {
+            onCancel()
+            return
+        }
+        if DominoViewModel.showDiscardConfirmation(
+            messageText: "Discard changes?",
+            informativeText: "Your custom recurrence settings will be lost."
+        ) {
+            onCancel()
+        }
     }
 
     private var repeatEveryRow: some View {
@@ -893,6 +967,7 @@ private struct CustomRecurrenceSheet: View {
             monthDay = dayOfMonth
             yearMonth = comps.month ?? 1
             yearDay = dayOfMonth
+            recurrenceBaseline = buildRecurrence()
             return
         }
 
@@ -935,6 +1010,8 @@ private struct CustomRecurrenceSheet: View {
             endMode = .afterCount
             endCount = n
         }
+
+        recurrenceBaseline = buildRecurrence()
     }
 }
 
@@ -1144,6 +1221,17 @@ private struct TransactionRow: View {
 
 // MARK: - Transaction Editor
 
+private struct FinancialTransactionDraftBaseline: Equatable {
+    var name: String
+    var type: ScheduledTransactionType
+    var amount: Double
+    var date: Date
+    var dueDate: Date
+    var tags: [String]
+    var note: String?
+    var scheduledTransactionID: UUID?
+}
+
 private struct TransactionEditorView: View {
     @ObservedObject var viewModel: DominoViewModel
     let transaction: FinancialTransaction?
@@ -1163,8 +1251,14 @@ private struct TransactionEditorView: View {
     @State private var selectedScheduledTransactionID: UUID?
     @State private var tags: [String] = []
     @State private var tagInput: String = ""
+    @State private var draftBaseline: FinancialTransactionDraftBaseline?
 
     var isEditing: Bool { transaction != nil }
+
+    private var hasUnsavedDraft: Bool {
+        guard let draftBaseline else { return false }
+        return currentDraftSnapshot() != draftBaseline
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1175,6 +1269,7 @@ private struct TransactionEditorView: View {
             }
         }
         .frame(width: 460, height: selectedScheduledTransactionID != nil ? 560 : 500)
+        .interactiveDismissDisabled(hasUnsavedDraft)
         .onAppear { loadTransaction() }
     }
 
@@ -1183,13 +1278,43 @@ private struct TransactionEditorView: View {
             Text(isEditing ? "Edit Transaction" : "New Transaction")
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
-            Button("Cancel") { dismiss() }
+            Button("Cancel") { cancelEditing() }
                 .buttonStyle(.borderless)
             Button("Save") { save() }
                 .buttonStyle(.borderedProminent)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(12)
+    }
+
+    private func currentDraftSnapshot() -> FinancialTransactionDraftBaseline {
+        FinancialTransactionDraftBaseline(
+            name: name.trimmingCharacters(in: .whitespaces),
+            type: type,
+            amount: Double(amount.replacingOccurrences(of: ",", with: "")) ?? 0,
+            date: date,
+            dueDate: selectedDueDate,
+            tags: tags,
+            note: note.trimmingCharacters(in: .whitespaces).nilIfEmpty,
+            scheduledTransactionID: selectedScheduledTransactionID
+        )
+    }
+
+    private func captureDraftBaseline() {
+        draftBaseline = currentDraftSnapshot()
+    }
+
+    private func cancelEditing() {
+        guard hasUnsavedDraft else {
+            dismiss()
+            return
+        }
+        if DominoViewModel.showDiscardConfirmation(
+            messageText: "Discard changes?",
+            informativeText: "Your edits to this transaction will be lost."
+        ) {
+            dismiss()
+        }
     }
 
     private var form: some View {
@@ -1385,6 +1510,7 @@ private struct TransactionEditorView: View {
                 }
             }
         }
+        captureDraftBaseline()
     }
 
     private func save() {
@@ -1664,6 +1790,13 @@ private struct BudgetProgressRow: View {
     }
 }
 
+private struct FinancialBudgetDraftBaseline: Equatable {
+    var name: String
+    var amount: Double
+    var tags: [String]
+    var isActive: Bool
+}
+
 private struct BudgetEditorView: View {
     @ObservedObject var viewModel: DominoViewModel
     let budget: FinancialBudget?
@@ -1675,8 +1808,14 @@ private struct BudgetEditorView: View {
     @State private var tagInput = ""
     @State private var isActive = true
     @State private var validationMessage: String?
+    @State private var draftBaseline: FinancialBudgetDraftBaseline?
 
     private var isEditing: Bool { budget != nil }
+
+    private var hasUnsavedDraft: Bool {
+        guard let draftBaseline else { return false }
+        return currentDraftSnapshot() != draftBaseline
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1684,7 +1823,7 @@ private struct BudgetEditorView: View {
                 Text(isEditing ? "Edit Budget" : "New Budget")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { cancelEditing() }
                     .buttonStyle(.borderless)
                 Button("Save") { save() }
                     .buttonStyle(.borderedProminent)
@@ -1732,7 +1871,34 @@ private struct BudgetEditorView: View {
             }
         }
         .frame(width: 420, height: 360)
+        .interactiveDismissDisabled(hasUnsavedDraft)
         .onAppear { loadBudget() }
+    }
+
+    private func currentDraftSnapshot() -> FinancialBudgetDraftBaseline {
+        FinancialBudgetDraftBaseline(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: Double(amount.replacingOccurrences(of: ",", with: "")) ?? 0,
+            tags: tags,
+            isActive: isActive
+        )
+    }
+
+    private func captureDraftBaseline() {
+        draftBaseline = currentDraftSnapshot()
+    }
+
+    private func cancelEditing() {
+        guard hasUnsavedDraft else {
+            dismiss()
+            return
+        }
+        if DominoViewModel.showDiscardConfirmation(
+            messageText: "Discard changes?",
+            informativeText: "Your edits to this budget will be lost."
+        ) {
+            dismiss()
+        }
     }
 
     private var tagSuggestions: [String] {
@@ -1749,11 +1915,13 @@ private struct BudgetEditorView: View {
     }
 
     private func loadBudget() {
-        guard let budget else { return }
-        name = budget.name
-        amount = String(format: "%.2f", budget.amount)
-        tags = budget.tagKeys
-        isActive = budget.isActive
+        if let budget {
+            name = budget.name
+            amount = String(format: "%.2f", budget.amount)
+            tags = budget.tagKeys
+            isActive = budget.isActive
+        }
+        captureDraftBaseline()
     }
 
     private func save() {

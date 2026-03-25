@@ -1003,15 +1003,24 @@ package final class DominoViewModel: ObservableObject {
             action()
             return
         }
-        if Self.showDiscardAlert() {
+        if Self.showDiscardConfirmation(
+            informativeText: Self.documentDiscardInformativeText
+        ) {
             action()
         }
     }
 
-    package static func showDiscardAlert() -> Bool {
+    package static let documentDiscardInformativeText =
+        "This will discard unsaved changes to your task board, finances, and any other data in this document."
+
+    /// Shows a Discard / Cancel alert. Used for document-level and in-sheet draft confirmation.
+    package static func showDiscardConfirmation(
+        messageText: String = "You have unsaved changes",
+        informativeText: String
+    ) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "You have unsaved changes"
-        alert.informativeText = "Do you want to discard your current board?"
+        alert.messageText = messageText
+        alert.informativeText = informativeText
         alert.addButton(withTitle: "Discard")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
