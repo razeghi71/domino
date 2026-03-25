@@ -38,7 +38,13 @@ struct ScrollWheelHandler: NSViewRepresentable {
             }
             guard window != nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                self?.updateCallback?(event.scrollingDeltaX, event.scrollingDeltaY)
+                guard let self else { return event }
+                // Local monitors see every window’s scroll events; only pan the canvas when the
+                // wheel targets this view’s window so Settings (and other windows) can scroll normally.
+                guard let eventWindow = event.window, eventWindow === self.window else {
+                    return event
+                }
+                self.updateCallback?(event.scrollingDeltaX, event.scrollingDeltaY)
                 return nil
             }
         }

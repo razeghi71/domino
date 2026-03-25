@@ -1,15 +1,96 @@
+import AppKit
 import SwiftUI
+
+private enum SettingsSidebarSection: String, CaseIterable, Identifiable {
+    case tasks
+    case financial
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .tasks: "Tasks"
+        case .financial: "Financial"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .tasks: "checklist"
+        case .financial: "dollarsign.circle"
+        }
+    }
+}
 
 package struct SettingsView: View {
     @ObservedObject package var viewModel: DominoViewModel
+    @State private var selectedSection: SettingsSidebarSection = .tasks
 
     package init(viewModel: DominoViewModel) {
         self.viewModel = viewModel
     }
 
     package var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 6) {
+                ForEach(SettingsSidebarSection.allCases) { section in
+                    sidebarButton(section)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(width: 84)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 8)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
+            Group {
+                switch selectedSection {
+                case .tasks:
+                    tasksManagementPane
+                case .financial:
+                    financialPlaceholderPane
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(minWidth: 640, minHeight: 440)
+        .background(AppColors.canvasBackgroundSwiftUI)
+    }
+
+    private func sidebarButton(_ section: SettingsSidebarSection) -> some View {
+        let isSelected = selectedSection == section
+        return Button {
+            selectedSection = section
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: 22, weight: .regular))
+                    .symbolVariant(isSelected ? .fill : .none)
+                Text(section.title)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+        }
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private var tasksManagementPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                Text("Tasks")
+                    .font(.title2.weight(.semibold))
+
                 GroupBox("System-Level Settings") {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("These statuses are used by default across boards unless a file adds its own override.")
@@ -55,9 +136,21 @@ package struct SettingsView: View {
                 }
             }
             .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minWidth: 560, minHeight: 440)
-        .background(AppColors.canvasBackgroundSwiftUI)
+    }
+
+    private var financialPlaceholderPane: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Financial")
+                .font(.title2.weight(.semibold))
+            Text("Financial settings will appear here.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(20)
     }
 
     private var fileSettingsDescription: String {
