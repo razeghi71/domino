@@ -100,7 +100,6 @@ private struct ScheduledTransactionsListView: View {
     @ObservedObject var viewModel: DominoViewModel
     @State private var showingAddScheduledTransaction = false
     @State private var editingScheduledTransaction: ScheduledTransaction?
-    @State private var filterType: ScheduledTransactionType?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -123,14 +122,6 @@ private struct ScheduledTransactionsListView: View {
 
             Spacer()
 
-            Picker("", selection: $filterType) {
-                Text("All").tag(nil as ScheduledTransactionType?)
-                Text("Income").tag(ScheduledTransactionType.income as ScheduledTransactionType?)
-                Text("Expense").tag(ScheduledTransactionType.expense as ScheduledTransactionType?)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
-
             Button {
                 showingAddScheduledTransaction = true
             } label: {
@@ -141,19 +132,14 @@ private struct ScheduledTransactionsListView: View {
         .padding(12)
     }
 
-    private var filteredEntries: [ScheduledTransaction] {
-        viewModel.scheduledTransactions.values
-            .filter { entry in
-                if let filter = filterType { return entry.type == filter }
-                return true
-            }
-            .sorted { $0.name < $1.name }
+    private var sortedEntries: [ScheduledTransaction] {
+        viewModel.scheduledTransactions.values.sorted { $0.name < $1.name }
     }
 
     private var entriesTable: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(filteredEntries) { entry in
+                ForEach(sortedEntries) { entry in
                     ScheduledTransactionRow(
                         scheduled: entry,
                         onEdit: { editingScheduledTransaction = entry },
