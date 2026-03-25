@@ -511,8 +511,17 @@ package struct ScheduledTransaction: Identifiable, Codable, Equatable {
         recurrence != nil
     }
 
+    private static let nonRecurringDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM yyyy"
+        f.locale = .autoupdatingCurrent
+        return f
+    }()
+
     var recurrenceDescription: String {
-        guard let recurrence else { return "Does not repeat" }
+        guard let recurrence else {
+            return Self.nonRecurringDateFormatter.string(from: createdAt)
+        }
         return recurrence.description
     }
 
