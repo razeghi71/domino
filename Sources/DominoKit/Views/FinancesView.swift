@@ -237,19 +237,7 @@ private struct CommitmentRow: View {
                 .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .foregroundStyle(commitment.type == .income ? .green : .primary)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(commitment.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.primary.opacity(0.06)))
-                    }
-                }
-            }
-            .frame(width: 160, alignment: .leading)
+            FinancialMetadataStrip(items: commitment.tags)
 
             Menu {
                 Button("Edit") { onEdit() }
@@ -315,19 +303,7 @@ private struct ForecastRow: View {
                 .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .foregroundStyle(forecast.type == .income ? .green : .primary)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(forecast.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.primary.opacity(0.06)))
-                    }
-                }
-            }
-            .frame(width: 160, alignment: .leading)
+            FinancialMetadataStrip(items: forecast.tags)
 
             Menu {
                 Button("Edit") { onEdit() }
@@ -1600,6 +1576,18 @@ private struct TransactionsListView: View {
         viewModel.transactionsForMonth(month: filterMonth, year: filterYear)
     }
 
+    private func planningLinkName(for transaction: FinancialTransaction) -> String? {
+        if let commitmentID = transaction.commitmentID,
+            let commitment = viewModel.commitments[commitmentID] {
+            return commitment.name.isEmpty ? "Untitled" : commitment.name
+        }
+        if let forecastID = transaction.forecastID,
+            let forecast = viewModel.forecasts[forecastID] {
+            return forecast.name.isEmpty ? "Untitled" : forecast.name
+        }
+        return nil
+    }
+
     private var transactionsList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -1619,6 +1607,7 @@ private struct TransactionsListView: View {
                     ForEach(filteredTransactions) { txn in
                         TransactionRow(
                             transaction: txn,
+                            planningLinkName: planningLinkName(for: txn),
                             onEdit: { editingTransaction = txn },
                             onDelete: { viewModel.deleteFinancialTransaction(txn.id) }
                         )
@@ -1632,6 +1621,7 @@ private struct TransactionsListView: View {
 
 private struct TransactionRow: View {
     let transaction: FinancialTransaction
+    let planningLinkName: String?
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -1639,6 +1629,8 @@ private struct TransactionRow: View {
         let linked = transaction.commitmentID != nil || transaction.forecastID != nil
         return linked && !Calendar.current.isDate(transaction.dueDate, inSameDayAs: transaction.date)
     }
+
+    private var metadataItems: [String] { transaction.tags }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1650,6 +1642,16 @@ private struct TransactionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.name.isEmpty ? "Untitled" : transaction.name)
                     .font(.system(size: 14, weight: .medium))
+                if let planningLinkName, !planningLinkName.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                            .font(.system(size: 10, weight: .medium))
+                        Text(planningLinkName)
+                            .lineLimit(1)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                }
                 if showsOccurrenceNote {
                     Text("Occurrence: \(Self.dateFormatter.string(from: transaction.dueDate))")
                         .font(.system(size: 11))
@@ -1667,6 +1669,8 @@ private struct TransactionRow: View {
             Text(transaction.type == .income ? "+\(formatAmount(transaction.amount))" : "-\(formatAmount(transaction.amount))")
                 .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .foregroundStyle(transaction.type == .income ? .green : .primary)
+
+            FinancialMetadataStrip(items: metadataItems, width: 180)
 
             HStack(spacing: 2) {
                 Button(action: onEdit) {
@@ -1706,6 +1710,28 @@ private struct TransactionRow: View {
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 2
         return formatter.string(from: NSNumber(value: amount)) ?? "\(amount)"
+    }
+}
+
+private struct FinancialMetadataStrip: View {
+    let items: [String]
+    var width: CGFloat = 160
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(items, id: \.self) { item in
+                    Text(item)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.primary.opacity(0.06)))
+                }
+            }
+        }
+        .frame(width: width, alignment: .leading)
     }
 }
 
