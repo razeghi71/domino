@@ -1160,7 +1160,8 @@ private struct TransactionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.name.isEmpty ? "Untitled" : transaction.name)
                     .font(.system(size: 14, weight: .medium))
-                if !Calendar.current.isDate(transaction.dueDate, inSameDayAs: transaction.date) {
+                if transaction.scheduledTransactionID != nil,
+                    !Calendar.current.isDate(transaction.dueDate, inSameDayAs: transaction.date) {
                     Text("Due: \(Self.dateFormatter.string(from: transaction.dueDate))")
                         .font(.system(size: 11))
                         .foregroundStyle(.orange)
@@ -1271,6 +1272,10 @@ private struct TransactionEditorView: View {
         .frame(width: 460, height: selectedScheduledTransactionID != nil ? 560 : 500)
         .interactiveDismissDisabled(hasUnsavedDraft)
         .onAppear { loadTransaction() }
+        .onChange(of: date) { _, newDate in
+            guard selectedScheduledTransactionID == nil else { return }
+            selectedDueDate = newDate
+        }
     }
 
     private var header: some View {
@@ -1476,7 +1481,9 @@ private struct TransactionEditorView: View {
             tags = txn.tags
             note = txn.note ?? ""
             selectedScheduledTransactionID = txn.scheduledTransactionID
-            if let stID = txn.scheduledTransactionID,
+            if txn.scheduledTransactionID == nil {
+                selectedDueDate = txn.date
+            } else if let stID = txn.scheduledTransactionID,
                 let scheduled = viewModel.scheduledTransactions[stID],
                 scheduled.isRecurring {
                 let instances = computeInstances(for: scheduled)
@@ -1516,6 +1523,7 @@ private struct TransactionEditorView: View {
     private func save() {
         let amountValue = Double(amount.replacingOccurrences(of: ",", with: "")) ?? 0
 
+        let effectiveDueDate = selectedScheduledTransactionID == nil ? date : selectedDueDate
         let saved = FinancialTransaction(
             id: transaction?.id ?? UUID(),
             scheduledTransactionID: selectedScheduledTransactionID,
@@ -1523,7 +1531,7 @@ private struct TransactionEditorView: View {
             amount: amountValue,
             type: type,
             date: date,
-            dueDate: selectedDueDate,
+            dueDate: effectiveDueDate,
             tags: tags,
             note: note.trimmingCharacters(in: .whitespaces).nilIfEmpty
         )
