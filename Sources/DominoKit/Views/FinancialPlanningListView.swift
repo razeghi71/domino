@@ -3,6 +3,9 @@ import SwiftUI
 // MARK: - Financial planning list (commitments + forecasts)
 
 struct FinancialPlanningListView: View {
+    /// Minimum width to show commitments and forecasts in two columns.
+    private static let sideBySideBreakpoint: CGFloat = 960
+
     @ObservedObject var viewModel: DominoViewModel
     @State private var showingAddCommitment = false
     @State private var showingAddForecast = false
@@ -60,39 +63,78 @@ struct FinancialPlanningListView: View {
     }
 
     private var entriesTable: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                sectionHeader("Commitments")
-                if sortedCommitments.isEmpty {
-                    emptyHint("No commitments yet. Add rent, salary, subscriptions—items you mark paid when they happen.")
-                }
-                ForEach(sortedCommitments) { entry in
-                    CommitmentRow(
-                        commitment: entry,
-                        onEdit: { editingCommitment = entry },
-                        onDelete: {
-                            viewModel.deleteCommitment(entry.id)
-                        }
-                    )
-                    Divider()
-                }
-
-                sectionHeader("Forecasts")
-                if sortedForecasts.isEmpty {
-                    emptyHint("No forecasts yet. Add typical spending like groceries or lunch—shown in the calendar as estimates, not due items.")
-                }
-                ForEach(sortedForecasts) { entry in
-                    ForecastRow(
-                        forecast: entry,
-                        onEdit: { editingForecast = entry },
-                        onDelete: {
-                            viewModel.deleteForecast(entry.id)
-                        }
-                    )
-                    Divider()
+        GeometryReader { geo in
+            ScrollView {
+                if geo.size.width >= Self.sideBySideBreakpoint {
+                    HStack(alignment: .top, spacing: 16) {
+                        commitmentsSection
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        planningColumnSeparator
+                        forecastsSection
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                } else {
+                    stackedPlanningList
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Commitments on top, forecasts below (narrow widths).
+    private var stackedPlanningList: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            commitmentsSection
+            forecastsSection
+        }
+    }
+
+    private var commitmentsSection: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            sectionHeader("Commitments")
+            if sortedCommitments.isEmpty {
+                emptyHint("No commitments yet. Add rent, salary, subscriptions—items you mark paid when they happen.")
+            }
+            ForEach(sortedCommitments) { entry in
+                CommitmentRow(
+                    commitment: entry,
+                    onEdit: { editingCommitment = entry },
+                    onDelete: {
+                        viewModel.deleteCommitment(entry.id)
+                    }
+                )
+                Divider()
+            }
+        }
+    }
+
+    private var forecastsSection: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            sectionHeader("Forecasts")
+            if sortedForecasts.isEmpty {
+                emptyHint("No forecasts yet. Add typical spending like groceries or lunch—shown in the calendar as estimates, not due items.")
+            }
+            ForEach(sortedForecasts) { entry in
+                ForecastRow(
+                    forecast: entry,
+                    onEdit: { editingForecast = entry },
+                    onDelete: {
+                        viewModel.deleteForecast(entry.id)
+                    }
+                )
+                Divider()
+            }
+        }
+    }
+
+    private var planningColumnSeparator: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.12))
+            .frame(width: 1)
+            .padding(.vertical, 6)
+            .accessibilityHidden(true)
     }
 
     private func sectionHeader(_ title: String) -> some View {
