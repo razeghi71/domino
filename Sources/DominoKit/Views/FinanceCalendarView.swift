@@ -164,12 +164,6 @@ package struct FinanceCalendarView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 20)
                     } else {
-                        ForEach(column.incomeLines) { line in
-                            transactionEventBlock(line, displayDayStart: column.displayDayStart, todayStart: todayStart)
-                        }
-                        ForEach(column.expenseLines) { line in
-                            transactionEventBlock(line, displayDayStart: column.displayDayStart, todayStart: todayStart)
-                        }
                         if hasForecasts {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(column.forecastIncomeLines) { line in
@@ -179,6 +173,12 @@ package struct FinanceCalendarView: View {
                                     forecastEventBlock(line, displayDayStart: column.displayDayStart)
                                 }
                             }
+                        }
+                        ForEach(column.incomeLines) { line in
+                            transactionEventBlock(line, displayDayStart: column.displayDayStart, todayStart: todayStart)
+                        }
+                        ForEach(column.expenseLines) { line in
+                            transactionEventBlock(line, displayDayStart: column.displayDayStart, todayStart: todayStart)
                         }
                     }
                 }
@@ -348,37 +348,31 @@ package struct FinanceCalendarView: View {
         let title = forecast.name.isEmpty ? "Untitled" : forecast.name
         let occ = line.occurrenceDate
         let showAltDay = !cal.isDate(occ, inSameDayAs: displayDayStart)
-        let rowFill = amountColor.opacity(0.1)
 
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(amountText)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(amountColor)
-                .fixedSize(horizontal: true, vertical: false)
+        return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(title)
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .minimumScaleFactor(0.85)
             if showAltDay {
-                Text(Self.shortDueFormatter.string(from: occ))
+                Text("  \(Self.shortDueFormatter.string(from: occ))")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 6)
+            Text(amountText)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(amountColor)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .background {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(rowFill)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .strokeBorder(amountColor.opacity(0.22), lineWidth: 0.5)
+                .fill(Color.primary.opacity(0.035))
         }
     }
 
