@@ -16,10 +16,5 @@ let package = Package(
             path: "Sources/Domino",
             resources: [.process("Resources")]
         ),
-        .testTarget(
-            name: "DominoTests",
-            dependencies: ["DominoKit"],
-            path: "Tests/DominoTests"
-        ),
     ]
 )

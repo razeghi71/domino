@@ -14,20 +14,6 @@ private enum TopTab: String, CaseIterable, Identifiable {
     }
 }
 
-private enum CanvasWorkspace: String, CaseIterable, Identifiable {
-    case graph
-    case table
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .graph: "Graph"
-        case .table: "Table"
-        }
-    }
-}
-
 private struct SegmentedTabs<T: RawRepresentable & CaseIterable & Identifiable & Equatable>: View where T.RawValue == String {
     @Binding var selection: T
     let titleFor: (T) -> String
@@ -71,7 +57,6 @@ package struct ContentView: View {
     @ObservedObject package var viewModel: DominoViewModel
     @Environment(\.openWindow) private var openWindow
     @State private var topTab: TopTab = .tasks
-    @State private var workspace: CanvasWorkspace = .graph
     @State private var isSearchPresented = false
     @State private var searchText = ""
     @State private var currentSearchIndex = -1
@@ -103,20 +88,6 @@ package struct ContentView: View {
         .onAppear {
             viewModel.openSettingsWindowAction = { openWindow(id: "settings") }
         }
-        .onChange(of: workspace) { _, newWorkspace in
-            guard let selectedNodeID = viewModel.selectedNodeID else { return }
-            switch newWorkspace {
-            case .graph:
-                viewModel.selectSingleNode(selectedNodeID)
-                DispatchQueue.main.async {
-                    viewModel.requestCanvasFocus(on: selectedNodeID)
-                }
-            case .table:
-                DispatchQueue.main.async {
-                    viewModel.requestTableFocus(on: selectedNodeID)
-                }
-            }
-        }
         .onChange(of: searchText) { _, _ in
             resetSearchCycle()
         }
@@ -140,14 +111,10 @@ package struct ContentView: View {
 
                 Spacer(minLength: 0)
 
-                ZStack {
-                    SegmentedTabs(selection: $workspace) { $0.title }
-
-                    HStack {
-                        Spacer(minLength: 0)
-                        if isSearchPresented {
-                            searchField
-                        }
+                HStack {
+                    Spacer(minLength: 0)
+                    if isSearchPresented {
+                        searchField
                     }
                 }
             }
@@ -161,14 +128,8 @@ package struct ContentView: View {
 
     // MARK: - Tasks Content
 
-    @ViewBuilder
     private var tasksContent: some View {
-        switch workspace {
-        case .graph:
-            CanvasView(viewModel: viewModel)
-        case .table:
-            NodesTableView(viewModel: viewModel)
-        }
+        CanvasView(viewModel: viewModel)
     }
 
     // MARK: - Search
@@ -249,13 +210,7 @@ package struct ContentView: View {
         currentSearchIndex = nextIndex
         lastSearchedQuery = trimmedSearchText
         viewModel.selectSingleNode(nodeID)
-
-        switch workspace {
-        case .graph:
-            viewModel.requestCanvasFocus(on: nodeID)
-        case .table:
-            viewModel.requestTableFocus(on: nodeID)
-        }
+        viewModel.requestCanvasFocus(on: nodeID)
     }
 
     private var trimmedSearchText: String {
@@ -267,15 +222,10 @@ package struct ContentView: View {
         let matches = viewModel.visibleNodes.filter {
             $0.text.localizedCaseInsensitiveContains(trimmedSearchText)
         }
-        switch workspace {
-        case .graph:
-            return matches.sorted { lhs, rhs in
-                if lhs.position.y != rhs.position.y { return lhs.position.y < rhs.position.y }
-                if lhs.position.x != rhs.position.x { return lhs.position.x < rhs.position.x }
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-        case .table:
-            return matches
+        return matches.sorted { lhs, rhs in
+            if lhs.position.y != rhs.position.y { return lhs.position.y < rhs.position.y }
+            if lhs.position.x != rhs.position.x { return lhs.position.x < rhs.position.x }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 

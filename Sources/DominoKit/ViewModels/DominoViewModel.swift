@@ -73,13 +73,6 @@ struct SearchPresentationRequest: Equatable {
     let token = UUID()
 }
 
-/// One row in the table view: live `node` snapshot plus a stripe group for alternating backgrounds by connected component.
-struct DominoTableRow: Identifiable, Equatable {
-    let id: UUID
-    let node: DominoNode
-    let stripeGroupIndex: Int
-}
-
 @MainActor
 package final class DominoViewModel: ObservableObject {
     @Published var nodes: [UUID: DominoNode] = [:]
@@ -106,7 +99,6 @@ package final class DominoViewModel: ObservableObject {
     }
     @Published package var doneVisibility: DoneVisibility = .showAll
     @Published var canvasFocusRequest: NodeFocusRequest?
-    @Published var tableFocusRequest: NodeFocusRequest?
     @Published var searchPresentationRequest: SearchPresentationRequest?
     @Published var commitments: [UUID: Commitment] = [:]
     @Published var forecasts: [UUID: Forecast] = [:]
@@ -128,8 +120,7 @@ package final class DominoViewModel: ObservableObject {
     var activeStatusSettings: DominoStatusSettings { fileStatusSettings ?? systemStatusSettings }
     var hasFileStatusSettings: Bool { fileStatusSettings != nil }
 
-    /// Set from the main SwiftUI window (`ContentView`). AppKit-hosted cells (table rows) do not receive
-    /// `EnvironmentValues.openWindow`, so they must call this instead of `@Environment(\.openWindow)`.
+    /// Set from the main SwiftUI window (`ContentView`). Used where `EnvironmentValues.openWindow` is unavailable.
     var openSettingsWindowAction: (() -> Void)?
 
     func openSettingsWindow() {
@@ -215,94 +206,6 @@ package final class DominoViewModel: ObservableObject {
             }
         }
         return result
-    }
-
-    /// Table order: repeated “topmost rank‑0 root in what’s left” → whole undirected connected component, nodes sorted by visible rank then canvas position.
-    var tableRows: [DominoTableRow] {
-        let visible = visibleNodes
-        let visibleIDs = Set(visible.map(\.id))
-        guard !visibleIDs.isEmpty else { return [] }
-
-        let ranks = nodeDegrees
-        var children: [UUID: [UUID]] = [:]
-        for id in visibleIDs {
-            guard let node = nodes[id] else { continue }
-            for pid in node.parentIDs where visibleIDs.contains(pid) {
-                children[pid, default: []].append(id)
-            }
-        }
-
-        func neighbors(of id: UUID) -> [UUID] {
-            var n = Set<UUID>()
-            n.formUnion(children[id] ?? [])
-            if let node = nodes[id] {
-                for pid in node.parentIDs where visibleIDs.contains(pid) {
-                    n.insert(pid)
-                }
-            }
-            return Array(n)
-        }
-
-        func component(startingAt start: UUID) -> Set<UUID> {
-            var stack: [UUID] = [start]
-            var seen = Set<UUID>()
-            while let v = stack.popLast() {
-                if seen.contains(v) { continue }
-                seen.insert(v)
-                for u in neighbors(of: v) {
-                    if !seen.contains(u) { stack.append(u) }
-                }
-            }
-            return seen
-        }
-
-        func topLeftFirst(_ a: UUID, _ b: UUID) -> Bool {
-            let pa = effectivePosition(a)
-            let pb = effectivePosition(b)
-            if pa.y != pb.y { return pa.y < pb.y }
-            if pa.x != pb.x { return pa.x < pb.x }
-            return a.uuidString < b.uuidString
-        }
-
-        func rankSortFirst(_ a: UUID, _ b: UUID) -> Bool {
-            let ra = ranks[a] ?? Int.max
-            let rb = ranks[b] ?? Int.max
-            if ra != rb { return ra < rb }
-            return topLeftFirst(a, b)
-        }
-
-        var unlisted = visibleIDs
-        var rows: [DominoTableRow] = []
-        var group = 0
-
-        while !unlisted.isEmpty {
-            guard let nextRoot = pickNextTableRoot(unlisted: unlisted, ranks: ranks, topLeftFirst: topLeftFirst)
-            else { break }
-            let comp = component(startingAt: nextRoot)
-            let orderedIDs = comp.sorted(by: rankSortFirst)
-            let stripe = group
-            for id in orderedIDs {
-                guard let node = nodes[id] else { continue }
-                rows.append(DominoTableRow(id: id, node: node, stripeGroupIndex: stripe))
-            }
-            unlisted.subtract(comp)
-            group += 1
-        }
-
-        return rows
-    }
-
-    private func pickNextTableRoot(
-        unlisted: Set<UUID>,
-        ranks: [UUID: Int],
-        topLeftFirst: (UUID, UUID) -> Bool
-    ) -> UUID? {
-        guard !unlisted.isEmpty else { return nil }
-        let rank0 = unlisted.filter { ranks[$0] == 0 }
-        if let best = rank0.min(by: topLeftFirst) {
-            return best
-        }
-        return unlisted.min(by: topLeftFirst)
     }
 
     private func isNodeVisible(_ id: UUID) -> Bool {
@@ -785,13 +688,6 @@ package final class DominoViewModel: ObservableObject {
         nodes[id]?.text = text
     }
 
-    /// Persists a full node `text` change with undo support (e.g. table editing).
-    func commitNodeTextIfChanged(_ id: UUID, text: String) {
-        guard nodes[id]?.text != text else { return }
-        saveSnapshot()
-        nodes[id]?.text = text
-    }
-
     package func deleteNode(_ id: UUID) {
         saveSnapshot()
         // Reparent children: replace this node with its parents in each child's parentIDs
@@ -870,11 +766,6 @@ package final class DominoViewModel: ObservableObject {
 
     func markCanvasRecenterApplied() {
         lastAppliedCanvasRecenterToken = canvasRecenterToken
-    }
-
-    func requestTableFocus(on id: UUID) {
-        guard isNodeVisible(id) else { return }
-        tableFocusRequest = NodeFocusRequest(nodeID: id)
     }
 
     func selectFirstVisibleNode(matching query: String) -> UUID? {

@@ -30,10 +30,6 @@ Right-click a task to set a target date or a budget. Hover a task with a date to
 
 Mark tasks with colored statuses like "In Progress" or "Done" from the right-click menu. Customize the full status palette under Settings (**⌘,**), picking your own names and colors. Each task's border reflects its current status so you can scan the canvas at a glance.
 
-### Table View
-
-Switch to the **Table** tab to see every task as a row grouped by connected tasks, ordered by depth. Edit text, status, date, and budget inline. Selecting a row highlights the matching node on the graph and vice versa.
-
 ### Search
 
 Press **⌘F** to find tasks by name. Step through matches with the arrow buttons or Enter. The canvas scrolls to each result so nothing stays hidden.
@@ -73,12 +69,6 @@ Run directly from source:
 
 ```
 swift run Domino
-```
-
-Run automated tests (table/status stress):
-
-```
-swift test
 ```
 
 ## Install as macOS App
