@@ -9,6 +9,8 @@ package struct FinanceCalendarView: View {
 
     private let horizonDays = 150
     private let columnWidth: CGFloat = 228
+    /// Space left under day columns so they don’t sit flush on the window bottom.
+    private let calendarColumnBottomInset: CGFloat = 20
     /// Cap history so we do not build tens of thousands of day columns or scan decades of months.
     private let calendarLookbackDays = 548
 
@@ -96,7 +98,9 @@ package struct FinanceCalendarView: View {
 
     private var calendarBody: some View {
         GeometryReader { geo in
-            let middleScrollHeight = max(188, geo.size.height - 196)
+            let columnHeight = max(0, geo.size.height - calendarColumnBottomInset)
+            // Reserve header + dividers + footer band (includes day header bottom padding).
+            let middleScrollHeight = max(188, columnHeight - 208)
             let now = Date()
             let cal = calendar
             let todayAnchor = cal.startOfDay(for: now)
@@ -108,9 +112,9 @@ package struct FinanceCalendarView: View {
                                 column: column,
                                 isToday: cal.isDate(column.displayDayStart, inSameDayAs: now),
                                 todayStart: todayAnchor,
-                                middleHeight: middleScrollHeight
+                                middleHeight: middleScrollHeight,
+                                columnHeight: columnHeight
                             )
-                            .frame(width: columnWidth)
                             .id(column.displayDayStart)
                         }
                     }
@@ -139,7 +143,8 @@ package struct FinanceCalendarView: View {
         column: FinanceCalendarDayColumn,
         isToday: Bool,
         todayStart: Date,
-        middleHeight: CGFloat
+        middleHeight: CGFloat,
+        columnHeight: CGFloat
     ) -> some View {
         let cal = calendar
         return VStack(alignment: .leading, spacing: 0) {
@@ -165,11 +170,15 @@ package struct FinanceCalendarView: View {
                         ForEach(column.expenseLines) { line in
                             transactionEventBlock(line, displayDayStart: column.displayDayStart, todayStart: todayStart)
                         }
-                        ForEach(column.forecastIncomeLines) { line in
-                            forecastEventBlock(line, displayDayStart: column.displayDayStart)
-                        }
-                        ForEach(column.forecastExpenseLines) { line in
-                            forecastEventBlock(line, displayDayStart: column.displayDayStart)
+                        if hasForecasts {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(column.forecastIncomeLines) { line in
+                                    forecastEventBlock(line, displayDayStart: column.displayDayStart)
+                                }
+                                ForEach(column.forecastExpenseLines) { line in
+                                    forecastEventBlock(line, displayDayStart: column.displayDayStart)
+                                }
+                            }
                         }
                     }
                 }
@@ -181,36 +190,40 @@ package struct FinanceCalendarView: View {
             Divider()
                 .padding(.horizontal, 8)
 
+            let totalIn = column.incomeTotal + column.forecastIncomeTotal
+            let totalOut = column.expenseTotal + column.forecastExpenseTotal
+            let isNegativeEndBalance = column.endOfDayBalance < 0
+
+            // Expand to fill height below the scroll so the negative-balance fill isn’t shorter than the column.
             VStack(alignment: .leading, spacing: 9) {
                 Text(formatAmount(column.endOfDayBalance, positivePrefix: ""))
                     .font(.system(size: 17, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(isNegativeEndBalance ? Self.harmonizedExpenseRed : Color.primary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("In \(formatAmount(column.incomeTotal, positivePrefix: "+"))")
+                    Text("In \(formatAmount(totalIn, positivePrefix: "+"))")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                    Text("Out \(formatAmount(column.expenseTotal, positivePrefix: ""))")
+                    Text("Out \(formatAmount(totalOut, positivePrefix: ""))")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                    if column.forecastIncomeTotal > 0 {
-                        Text("Forecast in \(formatAmount(column.forecastIncomeTotal, positivePrefix: "+"))")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                    if column.forecastExpenseTotal > 0 {
-                        Text("Forecast out \(formatAmount(column.forecastExpenseTotal, positivePrefix: ""))")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
                     if isToday, column.overdueUnpaidExpenseTotal > 0 || column.overdueUnpaidIncomeTotal > 0 {
                         overdueStartCaption(column: column)
                     }
                 }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, 12)
-            .padding(.vertical, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 14)
+            .background {
+                if isNegativeEndBalance {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Self.harmonizedExpenseRed.opacity(0.14))
+                }
+            }
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(width: columnWidth, height: columnHeight, alignment: .top)
         .background {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .fill(Color.primary.opacity(isToday ? 0.06 : 0.03))
@@ -243,6 +256,7 @@ package struct FinanceCalendarView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 11)
+        .padding(.bottom, 12)
     }
 
     private func overdueStartCaption(column: FinanceCalendarDayColumn) -> some View {
@@ -325,59 +339,46 @@ package struct FinanceCalendarView: View {
 
     private func forecastEventBlock(_ line: FinanceCalendarForecastLine, displayDayStart: Date) -> some View {
         let cal = calendar
-        let isIncome = line.forecast.type == .income
-        let amountColor: Color = isIncome ? Self.harmonizedIncomeGreen : Self.harmonizedExpenseRed
-        let occ = line.occurrenceDate
         let forecast = line.forecast
-        let trailingPadding: CGFloat = 12
+        let isIncome = forecast.type == .income
+        let amountColor: Color = isIncome ? Self.harmonizedIncomeGreen : Self.harmonizedExpenseRed
+        let amountText = isIncome
+            ? "+\(formatPlainAmount(forecast.amount))"
+            : "−\(formatPlainAmount(forecast.amount))"
+        let title = forecast.name.isEmpty ? "Untitled" : forecast.name
+        let occ = line.occurrenceDate
+        let showAltDay = !cal.isDate(occ, inSameDayAs: displayDayStart)
+        let rowFill = amountColor.opacity(0.1)
 
-        return ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.primary.opacity(0.05))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Self.forecastAccent.opacity(0.35), lineWidth: 1)
-                }
-
-            HStack(alignment: .top, spacing: 0) {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Self.forecastAccent.opacity(0.85))
-                    .frame(width: 5)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Forecast")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Self.forecastAccent)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule(style: .continuous).fill(Self.forecastAccent.opacity(0.14)))
-
-                    Text(forecast.name.isEmpty ? "Untitled" : forecast.name)
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(4)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.trailing, trailingPadding)
-
-                    Text(isIncome ? "+\(formatPlainAmount(forecast.amount))" : "−\(formatPlainAmount(forecast.amount))")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(amountColor)
-
-                    if !cal.isDate(occ, inSameDayAs: displayDayStart) {
-                        Text("Day: \(Self.shortDueFormatter.string(from: occ))")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 10)
-                .padding(.leading, 10)
-                .padding(.trailing, 7)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(amountText)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(amountColor)
+                .fixedSize(horizontal: true, vertical: false)
+            Text(title)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.85)
+            if showAltDay {
+                Text(Self.shortDueFormatter.string(from: occ))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(rowFill)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .strokeBorder(amountColor.opacity(0.22), lineWidth: 0.5)
         }
     }
 
@@ -458,7 +459,6 @@ package struct FinanceCalendarView: View {
     private static let dueAccent = harmonizedExpenseRed
     /// Soft azure—cool like the emerald green, distinct from green/red amount text.
     private static let futureUnpaidAccent = Color(red: 0.22, green: 0.52, blue: 0.86)
-    private static let forecastAccent = Color(red: 0.45, green: 0.42, blue: 0.62)
 
     private func formatAmount(_ amount: Double, positivePrefix: String) -> String {
         let formatter = NumberFormatter()
