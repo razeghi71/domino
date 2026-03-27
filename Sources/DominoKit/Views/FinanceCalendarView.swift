@@ -21,10 +21,12 @@ package struct FinanceCalendarView: View {
     }
 
     package var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            calendarBody
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                header(onScrollToToday: { scrollCalendarToToday(proxy: proxy) })
+                Divider()
+                calendarBody(scrollProxy: proxy)
+            }
         }
         .sheet(item: $customRecordPayload) { payload in
             FinanceCalendarCustomRecordSheet(
@@ -93,15 +95,17 @@ package struct FinanceCalendarView: View {
         return "\(commitmentID.uuidString)|\(day.timeIntervalSinceReferenceDate)"
     }
 
-    private var header: some View {
+    private func header(onScrollToToday: @escaping () -> Void) -> some View {
         HStack(alignment: .center, spacing: 14) {
             FinanceCalendarStartingBalanceBar(onApply: { appliedStartingBalance = $0 })
             Spacer()
+            Button("Today", action: onScrollToToday)
+                .buttonStyle(.bordered)
         }
         .padding(16)
     }
 
-    private var calendarBody: some View {
+    private func calendarBody(scrollProxy: ScrollViewProxy) -> some View {
         GeometryReader { geo in
             let columnHeight = max(0, geo.size.height - calendarColumnBottomInset)
             // Reserve header + dividers + footer band (includes day header bottom padding).
@@ -109,30 +113,35 @@ package struct FinanceCalendarView: View {
             let now = Date()
             let cal = calendar
             let todayAnchor = cal.startOfDay(for: now)
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: true) {
-                    LazyHStack(alignment: .top, spacing: 0) {
-                        ForEach(dayColumns) { column in
-                            dayColumn(
-                                column: column,
-                                isToday: cal.isDate(column.displayDayStart, inSameDayAs: now),
-                                todayStart: todayAnchor,
-                                middleHeight: middleScrollHeight,
-                                columnHeight: columnHeight
-                            )
-                            .id(column.displayDayStart)
-                        }
+            ScrollView(.horizontal, showsIndicators: true) {
+                LazyHStack(alignment: .top, spacing: 0) {
+                    ForEach(dayColumns) { column in
+                        dayColumn(
+                            column: column,
+                            isToday: cal.isDate(column.displayDayStart, inSameDayAs: now),
+                            todayStart: todayAnchor,
+                            middleHeight: middleScrollHeight,
+                            columnHeight: columnHeight
+                        )
+                        .id(column.displayDayStart)
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 8)
                 }
-                .onAppear {
-                    scheduleScrollToToday(proxy: proxy, todayAnchor: todayAnchor)
-                }
-                .onChange(of: dayColumns.count) { _, _ in
-                    scheduleScrollToToday(proxy: proxy, todayAnchor: todayAnchor)
-                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 8)
             }
+            .onAppear {
+                scheduleScrollToToday(proxy: scrollProxy, todayAnchor: todayAnchor)
+            }
+            .onChange(of: dayColumns.count) { _, _ in
+                scheduleScrollToToday(proxy: scrollProxy, todayAnchor: todayAnchor)
+            }
+        }
+    }
+
+    private func scrollCalendarToToday(proxy: ScrollViewProxy) {
+        let todayAnchor = calendar.startOfDay(for: Date())
+        DispatchQueue.main.async {
+            proxy.scrollTo(todayAnchor, anchor: .center)
         }
     }
 
