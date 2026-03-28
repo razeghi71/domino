@@ -112,6 +112,13 @@ package final class DominoViewModel: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let systemStatusSettingsKey = "domino.systemStatusSettings"
 
+    private static let recentDocumentPathsKey = "domino.recentDocumentPaths"
+
+    /// Bumped when recent documents change so SwiftUI can refresh lists.
+    @Published private(set) var recentDocumentsRefreshToken: UInt64 = 0
+    /// Set when the user explicitly starts a blank board (⌘N or hub); avoids re-showing the start hub for that empty session.
+    @Published private(set) var suppressStartHubForEmptyDocument = false
+
     private var undoStack: [[UUID: DominoNode]] = []
     private var redoStack: [[UUID: DominoNode]] = []
     private let maxUndoLevels = 50
@@ -131,6 +138,52 @@ package final class DominoViewModel: ObservableObject {
 
     package init() {
         systemStatusSettings = DominoViewModel.loadSystemStatusSettings(from: UserDefaults.standard, key: "domino.systemStatusSettings")
+    }
+
+    package var shouldShowStartHub: Bool {
+        currentFileURL == nil && nodes.isEmpty && !suppressStartHubForEmptyDocument
+    }
+
+    /// Clears the document and resets the suppress flag so the start hub shows.
+    package func resetToStartHub() {
+        nodes.removeAll()
+        commitments.removeAll()
+        forecasts.removeAll()
+        financialTransactions.removeAll()
+        financeCalendarStartingBalance = 0
+        fileStatusSettings = nil
+        editingNodeID = nil
+        selectedNodeID = nil
+        selectedNodeIDs.removeAll()
+        selectedEdgeID = nil
+        currentFileURL = nil
+        undoStack.removeAll()
+        redoStack.removeAll()
+        isDirty = false
+        fileLoadID = UUID()
+        suppressStartHubForEmptyDocument = false
+    }
+
+    /// Recent Domino JSON files that still exist on disk (stale paths are removed from storage).
+    package func recentDocumentURLs() -> [URL] {
+        let paths = userDefaults.stringArray(forKey: Self.recentDocumentPathsKey) ?? []
+        let valid = paths.filter { FileManager.default.fileExists(atPath: $0) }
+        if valid.count != paths.count {
+            userDefaults.set(valid, forKey: Self.recentDocumentPathsKey)
+        }
+        return valid.map { URL(fileURLWithPath: $0) }
+    }
+
+    private func recordDocumentURL(_ url: URL) {
+        let path = url.path
+        var paths = userDefaults.stringArray(forKey: Self.recentDocumentPathsKey) ?? []
+        paths.removeAll { $0 == path }
+        paths.insert(path, at: 0)
+        if paths.count > 10 {
+            paths = Array(paths.prefix(10))
+        }
+        userDefaults.set(paths, forKey: Self.recentDocumentPathsKey)
+        recentDocumentsRefreshToken &+= 1
     }
 
     private func saveSnapshot() {
@@ -925,7 +978,7 @@ package final class DominoViewModel: ObservableObject {
 
     // MARK: - New / Save / Open
 
-    package func newBoard() {
+    package func newBoard(suppressStartHub: Bool = false) {
         nodes.removeAll()
         commitments.removeAll()
         forecasts.removeAll()
@@ -941,6 +994,9 @@ package final class DominoViewModel: ObservableObject {
         redoStack.removeAll()
         isDirty = false
         fileLoadID = UUID()
+        if suppressStartHub {
+            suppressStartHubForEmptyDocument = true
+        }
     }
 
     package func save() {
@@ -984,14 +1040,25 @@ package final class DominoViewModel: ObservableObject {
             financeCalendarStartingBalance: startingBalanceField
         )
         guard let data = try? encoder.encode(document) else { return }
-        try? data.write(to: url)
-        isDirty = false
+        do {
+            try data.write(to: url)
+            isDirty = false
+            recordDocumentURL(url)
+        } catch {
+            // Keep isDirty true so the user can retry save elsewhere.
+        }
     }
 
-    private func readFromFile(_ url: URL) {
+    @discardableResult
+    package func openDocument(at url: URL) -> Bool {
+        readFromFile(url)
+    }
+
+    @discardableResult
+    private func readFromFile(_ url: URL) -> Bool {
         guard let data = try? Data(contentsOf: url),
             let loaded = decodeBoard(from: data)
-        else { return }
+        else { return false }
         nodes = Dictionary(uniqueKeysWithValues: loaded.nodes.map { ($0.id, $0) })
         commitments = Dictionary(uniqueKeysWithValues: (loaded.commitments ?? []).map { ($0.id, $0) })
         forecasts = Dictionary(uniqueKeysWithValues: (loaded.forecasts ?? []).map { ($0.id, $0) })
@@ -1006,6 +1073,8 @@ package final class DominoViewModel: ObservableObject {
         currentFileURL = url
         isDirty = false
         fileLoadID = UUID()
+        recordDocumentURL(url)
+        return true
     }
 
     // MARK: - Finances CRUD

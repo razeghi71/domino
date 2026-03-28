@@ -14,7 +14,9 @@ struct DominoApp: App {
             ContentView(viewModel: viewModel)
                 .onAppear {
                     appDelegate.viewModel = viewModel
+                    appDelegate.openMainWindowAction = { [openWindow] in openWindow(id: "main") }
                     if let window = NSApplication.shared.windows.first {
+                        appDelegate.mainWindow = window
                         appDelegate.configureWindow(window)
                     }
                 }
@@ -42,7 +44,7 @@ struct DominoApp: App {
                 Button("New") {
                     ensureWindowOpen()
                     viewModel.confirmDiscardIfNeeded {
-                        viewModel.newBoard()
+                        viewModel.newBoard(suppressStartHub: true)
                     }
                 }
                 .keyboardShortcut("n", modifiers: .command)
@@ -139,6 +141,8 @@ struct DominoApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unchecked Sendable {
     var viewModel: DominoViewModel?
+    var mainWindow: NSWindow?
+    var openMainWindowAction: (() -> Void)?
 
     func configureWindow(_ window: NSWindow) {
         window.delegate = self
@@ -149,23 +153,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, @unc
         window.backgroundColor = AppColors.canvasBackground
     }
 
-    /// If the document has unsaved changes, prompts to discard; clears state when the user discards.
-    /// Returns whether it is OK to proceed (close window or quit app).
-    private func confirmDiscardDocumentIfNeededForCloseOrQuit() -> Bool {
-        guard let viewModel, viewModel.isDirty else { return true }
-        guard DominoViewModel.showDiscardConfirmation(
-            informativeText: DominoViewModel.documentDiscardInformativeText
-        ) else { return false }
-        viewModel.newBoard()
-        return true
-    }
-
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        confirmDiscardDocumentIfNeededForCloseOrQuit()
+        guard sender === mainWindow else { return true }
+        guard let viewModel else { return true }
+        if viewModel.isDirty {
+            guard DominoViewModel.showDiscardConfirmation(
+                informativeText: DominoViewModel.documentDiscardInformativeText
+            ) else { return false }
+        }
+        viewModel.resetToStartHub()
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        confirmDiscardDocumentIfNeededForCloseOrQuit() ? .terminateNow : .terminateCancel
+        guard let viewModel, viewModel.isDirty else { return .terminateNow }
+        guard DominoViewModel.showDiscardConfirmation(
+            informativeText: DominoViewModel.documentDiscardInformativeText
+        ) else { return .terminateCancel }
+        return .terminateNow
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            openMainWindowAction?()
+        }
+        return true
     }
 
     func windowDidBecomeMain(_ notification: Notification) {
