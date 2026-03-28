@@ -67,9 +67,9 @@ struct FieldGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: 6) {
             if let title {
                 Text(title.uppercased())
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.tertiary)
-                    .tracking(0.5)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.8)
                     .padding(.leading, 2)
             }
             VStack(alignment: .leading, spacing: 10) {
