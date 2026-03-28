@@ -165,7 +165,7 @@ struct CommitmentRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(commitment.name.isEmpty ? "Untitled" : commitment.name)
                         .font(.system(size: 14, weight: .medium))
@@ -225,7 +225,7 @@ struct ForecastRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(forecast.name.isEmpty ? "Untitled" : forecast.name)
                         .font(.system(size: 14, weight: .medium))

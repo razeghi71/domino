@@ -149,9 +149,19 @@ struct TransactionRow: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
 
-    private var showsOccurrenceNote: Bool {
-        let linked = transaction.commitmentID != nil || transaction.forecastID != nil
-        return linked && !Calendar.current.isDate(transaction.dueDate, inSameDayAs: transaction.date)
+    private var hasPlanningLink: Bool {
+        transaction.commitmentID != nil || transaction.forecastID != nil
+    }
+
+    private var linkedPlanningSubtitle: String {
+        let name: String
+        if let planningLinkName, !planningLinkName.isEmpty {
+            name = planningLinkName
+        } else {
+            name = "Planning item"
+        }
+        let due = Self.dateFormatter.string(from: transaction.dueDate)
+        return "\(name): \(due) occurrence"
     }
 
     private var metadataItems: [String] { transaction.tags }
@@ -163,23 +173,18 @@ struct TransactionRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 60, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(transaction.name.isEmpty ? "Untitled" : transaction.name)
                     .font(.system(size: 14, weight: .medium))
-                if let planningLinkName, !planningLinkName.isEmpty {
-                    HStack(spacing: 4) {
+                if hasPlanningLink {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: "link")
                             .font(.system(size: 10, weight: .medium))
-                        Text(planningLinkName)
-                            .lineLimit(1)
+                        Text(linkedPlanningSubtitle)
+                            .lineLimit(2)
                     }
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                }
-                if showsOccurrenceNote {
-                    Text("Occurrence: \(Self.dateFormatter.string(from: transaction.dueDate))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.orange)
                 }
                 if let note = transaction.note, !note.isEmpty {
                     Text(note)
