@@ -4,7 +4,7 @@
 
 # Domino
 
-Native Mac app for life planning using dependency graphs
+Opinionated Mac app for planning your life.
 
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge)](https://github.com/razeghi71/domino/releases/latest/download/Domino.zip)
 
@@ -12,7 +12,11 @@ Native Mac app for life planning using dependency graphs
 
 </div>
 
-## Features
+## Overview
+
+Domino is an app for planning two things: what you need to get done, and how money comes in and goes out. **Tasks** is an infinite canvas for mapping that work as nodes linked by dependency arrows. **Finances** is where you plan recurring money, log transactions, and watch cash flow on a calendar.
+
+## Task board
 
 ### Visual Task Mapping
 
@@ -54,7 +58,31 @@ Shift-click to toggle individual tasks in your selection. Click on empty space a
 
 Every change is snapshotted. **⌘Z** to undo, **⌘⇧Z** to redo, up to 50 levels deep.
 
-### Save & Open
+## Finances
+
+Open the **Finances** tab to manage money alongside your graph. The left sidebar switches between four areas.
+
+### Financial planning
+
+**Commitments** are recurring income or expenses you expect on a schedule (rent, salary, subscriptions, and similar). They generate **due occurrences** you can mark as paid. **Forecasts** are softer recurring estimates—think groceries or discretionary spending—shown in the calendar as projections, not as items you "pay off" like commitments.
+
+Add items from the **+** menu. Commitments and forecasts support income vs expense, recurrence, tags, and can be paused. By default, commitments that are fully paid through the past are hidden; turn **Hide fully paid commitments** off under Settings (**⌘,**) → **Financial** if you want them listed anyway.
+
+### Transactions
+
+A month-scoped ledger of recorded cash flow. Add one-off or ad-hoc entries, or record amounts linked to a commitment occurrence or a forecast. Rows show whether a transaction is tied to planning (with the due occurrence date), and you can attach tags and notes.
+
+### Calendar
+
+A horizontal, day-by-day view that rolls from recent history into the next several months. Each column lists commitment due items and forecast projections; paid commitments show as settled, and overdue unpaid items roll forward visually. Set a **starting balance** (cash at the start of today) to project **end-of-day balances** forward; totals summarize money in, money out, and the running balance.
+
+For an unpaid commitment on a day, use the **+** control on the card to **record** a transaction—on the due date, on today, on the first working day on or after the due date, or a custom date.
+
+### Summary
+
+Pick a month to see **income, expenses, and net** for recorded transactions, **spending by tag** (expenses allocated across tags), and **forecast vs actual** bars comparing what recurring forecasts expected for that month to what you recorded against those forecasts.
+
+## Save & Open
 
 **⌘S** saves your board as a JSON file. **⌘O** opens one. The app warns before discarding unsaved changes. Older Domino files are loaded and migrated automatically.
 
