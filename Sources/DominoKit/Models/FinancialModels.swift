@@ -244,6 +244,13 @@ package struct Recurrence: Codable, Equatable {
             }
         }
 
+        if let start = startDate {
+            let startFormatter = DateFormatter()
+            startFormatter.dateFormat = "MMM d yyyy"
+            startFormatter.locale = .autoupdatingCurrent
+            parts.append(" starting from \(startFormatter.string(from: start))")
+        }
+
         switch end {
         case .count(let n):
             parts.append(", \(n) times")
@@ -522,7 +529,11 @@ package struct Commitment: Identifiable, Codable, Equatable {
         guard let recurrence else {
             return Self.nonRecurringDateFormatter.string(from: createdAt)
         }
-        return recurrence.description
+        var r = recurrence
+        if r.startDate == nil {
+            r.startDate = createdAt
+        }
+        return r.description
     }
 
     private static func normalizedTags(from rawTags: [String]) -> [String] {
@@ -619,7 +630,11 @@ package struct Forecast: Identifiable, Codable, Equatable {
         guard let recurrence else {
             return Self.nonRecurringDateFormatter.string(from: createdAt)
         }
-        return recurrence.description
+        var r = recurrence
+        if r.startDate == nil {
+            r.startDate = createdAt
+        }
+        return r.description
     }
 }
 
