@@ -2,11 +2,17 @@ import SwiftUI
 
 // MARK: - Financial planning list (commitments + forecasts)
 
+enum FinancialPlanningUserDefaultsKey {
+    /// When true (default), commitments that are fully paid and in the past are hidden from the planning list.
+    static let hideFullyPaidCommitments = "domino.financialPlanning.hideFullyPaidCommitments"
+}
+
 struct FinancialPlanningListView: View {
     /// Minimum width to show commitments and forecasts in two columns.
     private static let sideBySideBreakpoint: CGFloat = 960
 
     @ObservedObject var viewModel: DominoViewModel
+    @AppStorage(FinancialPlanningUserDefaultsKey.hideFullyPaidCommitments) private var hideFullyPaidCommitments = true
     @State private var showingAddCommitment = false
     @State private var showingAddForecast = false
     @State private var editingCommitment: Commitment?
@@ -55,7 +61,16 @@ struct FinancialPlanningListView: View {
     }
 
     private var sortedCommitments: [Commitment] {
-        viewModel.commitments.values.sorted { $0.name < $1.name }
+        let base = viewModel.commitments.values.sorted { $0.name < $1.name }
+        guard hideFullyPaidCommitments else { return base }
+        return base.filter { !viewModel.commitmentIsFullyPaid($0) }
+    }
+
+    private var commitmentsEmptyHint: String {
+        if viewModel.commitments.isEmpty {
+            return "No commitments yet. Add rent, salary, subscriptions—items you mark paid when they happen."
+        }
+        return "Fully paid commitments are hidden. Turn off \"Hide fully paid commitments\" in Settings (Financial) to show them."
     }
 
     private var sortedForecasts: [Forecast] {
@@ -95,7 +110,7 @@ struct FinancialPlanningListView: View {
         LazyVStack(alignment: .leading, spacing: 0) {
             sectionHeader("Commitments")
             if sortedCommitments.isEmpty {
-                emptyHint("No commitments yet. Add rent, salary, subscriptions—items you mark paid when they happen.")
+                emptyHint(commitmentsEmptyHint)
             }
             ForEach(sortedCommitments) { entry in
                 CommitmentRow(

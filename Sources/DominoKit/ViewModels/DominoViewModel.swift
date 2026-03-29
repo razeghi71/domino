@@ -1244,6 +1244,35 @@ package final class DominoViewModel: ObservableObject {
         }
     }
 
+    /// One-off commitments past their due day and paid, or finite recurring series whose end is in the past and every occurrence was paid.
+    package func commitmentIsFullyPaid(_ commitment: Commitment, calendar: Calendar = .current, now: Date = Date()) -> Bool {
+        let todayStart = calendar.startOfDay(for: now)
+
+        guard var rec = commitment.recurrence else {
+            let due = commitment.createdAt
+            guard todayStart > calendar.startOfDay(for: due) else { return false }
+            return isCommitmentOccurrencePaid(commitmentID: commitment.id, dueDate: due, calendar: calendar)
+        }
+
+        rec.startDate = commitment.createdAt
+
+        switch rec.end {
+        case .never:
+            return false
+        case .until(let untilDate):
+            guard todayStart > calendar.startOfDay(for: untilDate) else { return false }
+            let dates = Self.commitmentOccurrenceDatesThroughUntil(recurrence: rec, untilDate: untilDate, calendar: calendar)
+            guard !dates.isEmpty else { return false }
+            return dates.allSatisfy { isCommitmentOccurrencePaid(commitmentID: commitment.id, dueDate: $0, calendar: calendar) }
+        case .count(let n):
+            guard n > 0 else { return false }
+            let dates = Self.commitmentOccurrenceDatesForCount(recurrence: rec, count: n, calendar: calendar)
+            guard dates.count == n, let last = dates.last else { return false }
+            guard todayStart > calendar.startOfDay(for: last) else { return false }
+            return dates.allSatisfy { isCommitmentOccurrencePaid(commitmentID: commitment.id, dueDate: $0, calendar: calendar) }
+        }
+    }
+
     /// Recorded transaction for this commitment occurrence, if any (matched by `dueDate` calendar day).
     package func financialTransactionCoveringCommitmentOccurrence(
         commitmentID: UUID,
@@ -1273,6 +1302,59 @@ package final class DominoViewModel: ObservableObject {
     package func allTransactionTags() -> [String] {
         let tags = financialTransactions.values.flatMap(\.tags).filter { !$0.isEmpty }
         return Array(Set(tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Occurrence dates from the recurrence anchor through the month of `untilDate` (inclusive), respecting `until` in `occurrences(in:year:)`.
+    private static func commitmentOccurrenceDatesThroughUntil(
+        recurrence: Recurrence,
+        untilDate: Date,
+        calendar: Calendar
+    ) -> [Date] {
+        let rec = recurrence
+        guard let start = rec.startDate else { return [] }
+        var y = calendar.component(.year, from: start)
+        var m = calendar.component(.month, from: start)
+        let endY = calendar.component(.year, from: untilDate)
+        let endM = calendar.component(.month, from: untilDate)
+        var out: [Date] = []
+        while y < endY || (y == endY && m <= endM) {
+            out.append(contentsOf: rec.occurrences(in: m, year: y, calendar: calendar))
+            m += 1
+            if m > 12 {
+                m = 1
+                y += 1
+            }
+        }
+        return out.sorted()
+    }
+
+    /// First `count` chronological occurrence dates for a finite recurrence (`.count` end), walking month by month from the anchor.
+    private static func commitmentOccurrenceDatesForCount(
+        recurrence: Recurrence,
+        count: Int,
+        calendar: Calendar
+    ) -> [Date] {
+        let rec = recurrence
+        guard let start = rec.startDate else { return [] }
+        var y = calendar.component(.year, from: start)
+        var m = calendar.component(.month, from: start)
+        var out: [Date] = []
+        var monthIterations = 0
+        let maxMonths = 1200
+        while out.count < count && monthIterations < maxMonths {
+            let monthDates = rec.occurrences(in: m, year: y, calendar: calendar).sorted()
+            for d in monthDates {
+                if out.count >= count { break }
+                out.append(d)
+            }
+            m += 1
+            if m > 12 {
+                m = 1
+                y += 1
+            }
+            monthIterations += 1
+        }
+        return out
     }
 
     private func backfillTransactionTagsFromPlanningItemsIfNeeded() {

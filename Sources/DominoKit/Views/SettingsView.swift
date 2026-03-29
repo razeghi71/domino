@@ -24,6 +24,7 @@ private enum SettingsSidebarSection: String, CaseIterable, Identifiable {
 
 package struct SettingsView: View {
     @ObservedObject package var viewModel: DominoViewModel
+    @AppStorage(FinancialPlanningUserDefaultsKey.hideFullyPaidCommitments) private var hideFullyPaidCommitments = true
     @State private var selectedSection: SettingsSidebarSection = .tasks
 
     package init(viewModel: DominoViewModel) {
@@ -141,16 +142,28 @@ package struct SettingsView: View {
     }
 
     private var financialPlaceholderPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Financial")
-                .font(.title2.weight(.semibold))
-            Text("Financial settings will appear here.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Financial")
+                    .font(.title2.weight(.semibold))
+
+                GroupBox("Financial planning") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Hide fully paid commitments", isOn: $hideFullyPaidCommitments)
+                        Text(
+                            "When this is on, the Financial Planning list omits one-time commitments whose due date is in the past and are paid, and recurring commitments whose end date is in the past (or fixed count finished) with every occurrence paid."
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(20)
     }
 
     private var fileSettingsDescription: String {
